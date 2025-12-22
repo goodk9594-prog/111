@@ -19,7 +19,7 @@ local BOX = {Box=true,Chest=true,Barrel=true}
 -- State
 local S = {boxPick=false, fruitPick=false}
 local busy, bad = false, {}
-local FruitLog = {} -- 🔒 不随重生清空的果实记录
+local FruitLog = {} -- 不随重生清空
 
 -- GUI
 pcall(function() CoreGui.AutoPickGui:Destroy() end)
@@ -32,6 +32,7 @@ frame.Position = UDim2.new(0,20,0,120)
 frame.BackgroundColor3 = Color3.fromRGB(35,35,35)
 frame.BorderSizePixel = 0
 
+-- Toggles
 local function toggle(y,text,key)
 	local b=Instance.new("TextButton",frame)
 	b.Size=UDim2.new(1,-10,0,26)
@@ -49,6 +50,7 @@ end
 toggle(10,"自动拾取箱子：","boxPick")
 toggle(40,"拾取果实：","fruitPick")
 
+-- Close → minimize
 local close=Instance.new("TextButton",frame)
 close.Size=UDim2.new(0,22,0,22)
 close.Position=UDim2.new(1,-26,0,4)
@@ -56,13 +58,11 @@ close.Text="X"
 close.BackgroundColor3=Color3.fromRGB(120,60,60)
 close.TextColor3=Color3.new(1,1,1)
 close.BorderSizePixel=0
-close.MouseButton1Click:Connect(function() gui.Enabled=false end)
 
 -- List
 local list=Instance.new("ScrollingFrame",frame)
 list.Position=UDim2.new(0,5,0,80)
 list.Size=UDim2.new(1,-10,1,-85)
-list.CanvasSize=UDim2.new(0,0,0,0)
 list.ScrollBarThickness=6
 list.BackgroundColor3=Color3.fromRGB(28,28,28)
 list.BorderSizePixel=0
@@ -86,11 +86,6 @@ local function renderLog(name,time)
 	l.Text=string.format("%s [%s]",name,time)
 end
 
--- 恢复历史记录（重生不清空）
-for _,v in ipairs(FruitLog) do
-	renderLog(v.name,v.time)
-end
-
 local function addFruit(name)
 	local time=nowTime()
 	table.insert(FruitLog,{name=name,time=time})
@@ -110,19 +105,23 @@ icon.TextColor3=Color3.new(1,1,1)
 icon.BorderSizePixel=0
 Instance.new("UICorner",icon).CornerRadius=UDim.new(1,0)
 
-frame:GetPropertyChangedSignal("Visible"):Connect(function()
-	icon.Visible = not frame.Visible
+close.MouseButton1Click:Connect(function()
+	frame.Visible=false
+	icon.Visible=true
 end)
 
 icon.MouseButton1Click:Connect(function()
 	frame.Visible=true
+	icon.Visible=false
 end)
 
 -- 📱 Touch drag only
 local dragging,startPos,startTouch=false
 icon.InputBegan:Connect(function(i)
 	if i.UserInputType==Enum.UserInputType.Touch then
-		dragging=true; startPos=icon.Position; startTouch=i.Position
+		dragging=true
+		startPos=icon.Position
+		startTouch=i.Position
 	end
 end)
 icon.InputEnded:Connect(function(i)
@@ -131,7 +130,10 @@ end)
 UIS.InputChanged:Connect(function(i)
 	if dragging and i.UserInputType==Enum.UserInputType.Touch then
 		local d=i.Position-startTouch
-		icon.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,startPos.Y.Scale,startPos.Y.Offset+d.Y)
+		icon.Position=UDim2.new(
+			startPos.X.Scale,startPos.X.Offset+d.X,
+			startPos.Y.Scale,startPos.Y.Offset+d.Y
+		)
 	end
 end)
 
@@ -208,7 +210,7 @@ task.spawn(function()
 	end
 end)
 
--- 果实生成检测（永久开启）
+-- Fruit spawn detect (always on)
 workspace.DescendantAdded:Connect(function(o)
 	if o:IsA("ProximityPrompt") then
 		task.wait(0.1)
@@ -219,3 +221,5 @@ workspace.DescendantAdded:Connect(function(o)
 		end
 	end
 end)
+
+warn("✅ 最终整合版脚本已加载")
