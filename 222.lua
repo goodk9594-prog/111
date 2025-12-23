@@ -7,7 +7,11 @@ local PPS = game:GetService("ProximityPromptService")
 local VirtualUser = game:GetService("VirtualUser")
 
 local P = Players.LocalPlayer
-local PlayerGui = P:WaitForChild("PlayerGui")
+local PlayerGui
+repeat
+	task.wait()
+	PlayerGui = P:FindFirstChildOfClass("PlayerGui")
+until PlayerGui
 
 --====================================================
 -- Anti AFK（稳定）
