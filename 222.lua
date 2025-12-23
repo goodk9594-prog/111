@@ -1,17 +1,15 @@
 -- ================== Services ==================
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 local VirtualUser = game:GetService("VirtualUser")
+local CoreGui = game:GetService("CoreGui")
 local P = Players.LocalPlayer
 
 -- ================== State ==================
 local running = true
-local autoPick = true
 local autoFruit = true
 local busy = false
 local bad = {}
-local records = {} -- 果实生成记录（不清空）
 
 -- ================== Config ==================
 local MAX_DIST = 3000
@@ -44,17 +42,19 @@ local function HRP()
 end
 
 -- ================== GUI ==================
-local gui = Instance.new("ScreenGui", P.PlayerGui)
+local gui = Instance.new("ScreenGui")
+gui.Name = "FruitAutoGui"
 gui.ResetOnSpawn = false
+gui.Parent = CoreGui
+pcall(function() syn.protect_gui(gui) end)
 
 -- 主窗口
 local frame = Instance.new("Frame", gui)
 frame.Size = UDim2.new(0,240,0,280)
 frame.Position = UDim2.new(0,30,0,200)
 frame.BackgroundColor3 = Color3.fromRGB(35,35,35)
-frame.Visible = true
 
--- 关闭按钮（彻底停止）
+-- 关闭按钮（停止脚本）
 local close = Instance.new("TextButton", frame)
 close.Size = UDim2.new(0,22,0,22)
 close.Position = UDim2.new(1,-26,0,4)
@@ -91,7 +91,6 @@ local function addRecord(name)
 	label.TextSize = 14
 	label.Text = "["..t.."] "..name
 	label.TextColor3 = Color3.fromRGB(255,200,60)
-	table.insert(records,label)
 	task.wait()
 	list.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y)
 end
@@ -101,34 +100,34 @@ local function safeExpandFromIcon()
 	local vp = workspace.CurrentCamera.ViewportSize
 	local size = frame.AbsoluteSize
 	local pos = icon.AbsolutePosition
-
 	local x,y = pos.X,pos.Y
-	if x+size.X>vp.X then x=vp.X-size.X end
-	if y+size.Y>vp.Y then y=vp.Y-size.Y end
-	if x<0 then x=0 end
-	if y<0 then y=0 end
+
+	if x + size.X > vp.X then x = vp.X - size.X end
+	if y + size.Y > vp.Y then y = vp.Y - size.Y end
+	if x < 0 then x = 0 end
+	if y < 0 then y = 0 end
 
 	frame.Position = UDim2.fromOffset(x,y)
 end
 
 -- ================== Buttons ==================
 mini.MouseButton1Click:Connect(function()
-	frame.Visible=false
-	icon.Visible=true
+	frame.Visible = false
+	icon.Visible = true
 end)
 
 close.MouseButton1Click:Connect(function()
-	running=false
+	running = false
 	gui:Destroy()
 end)
 
 icon.MouseButton1Click:Connect(function()
 	safeExpandFromIcon()
-	frame.Visible=true
-	icon.Visible=false
+	frame.Visible = true
+	icon.Visible = false
 end)
 
--- ================== 手机拖动图标 ==================
+-- ================== 手机端拖动图标 ==================
 local dragging,startPos,startTouch=false
 icon.InputBegan:Connect(function(i)
 	if i.UserInputType==Enum.UserInputType.Touch then
@@ -182,7 +181,7 @@ local function pick(p)
 	busy=false
 end
 
--- ================== 自动拾取循环 ==================
+-- ================== 自动拾取 ==================
 task.spawn(function()
 	while running do
 		task.wait(0.4)
