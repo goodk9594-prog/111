@@ -169,32 +169,67 @@ close.MouseButton1Click:Connect(function()
 end)
 
 --====================================================
--- 自动拾取 & 果实检测（逻辑不依赖 GUI）
+-- 自动拾取（循环扫描稳定版）
 --====================================================
 local FRUIT = {
 	["Hie Hie Devil Fruit"]=true,
 	["Bomu Bomu Devil Fruit"]=true,
+	["Mochi Mochi Devil Fruit"]=true,
 	["Mochi Mochi Devil Fruit"]=true,
 	["Nikyu Nikyu Devil Fruit"]=true,
 	["Bari Bari Devil Fruit"]=true,
 }
 local BOX = {Box=true,Chest=true,Barrel=true}
 
-workspace.DescendantAdded:Connect(function(o)
-	if o:IsA("ProximityPrompt") then
-		local c = o.Parent
-		while c do
-			if FRUIT[c.Name] and State.fruit then
-				fireproximityprompt(o)
-				break
+local busy = false
+local MAX_DIST = 3000
+local SCAN = 0.5
+
+local function getType(pp)
+	local c = pp.Parent
+	while c do
+		if FRUIT[c.Name] then return "fruit", c end
+		if BOX[c.Name] then return "box", c end
+		c = c.Parent
+	end
+end
+
+task.spawn(function()
+	while true do
+		task.wait(SCAN)
+		if busy then continue end
+
+		local hrp = HRP()
+		local best, dist = nil, math.huge
+
+		for _,pp in ipairs(workspace:GetDescendants()) do
+			if pp:IsA("ProximityPrompt") and pp.Enabled then
+				local kind, model = getType(pp)
+				if kind == "fruit" and not State.fruit then continue end
+				if kind == "box" and not State.box then continue end
+				if not kind then continue end
+
+				local part = pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
+				if part:IsA("BasePart") then
+					local d = (hrp.Position - part.Position).Magnitude
+					if d < dist and d <= MAX_DIST then
+						best = pp
+						dist = d
+					end
+				end
 			end
-			if BOX[c.Name] and State.box then
-				fireproximityprompt(o)
-				break
+		end
+
+		if best then
+			busy = true
+			local part = best.Parent:IsA("Attachment") and best.Parent.Parent or best.Parent
+			HRP().CFrame = part.CFrame * CFrame.new(0,0,2)
+			task.wait(0.15)
+			if fireproximityprompt then
+				fireproximityprompt(best)
 			end
-			c = c.Parent
+			task.wait(0.3)
+			busy = false
 		end
 	end
 end)
-
-warn("✅ 手机稳定版 GUI 已加载")
