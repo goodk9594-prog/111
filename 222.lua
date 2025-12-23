@@ -1,240 +1,200 @@
+--====================================================
 -- Services
+--====================================================
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local UIS = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
+local PPS = game:GetService("ProximityPromptService")
 local P = Players.LocalPlayer
 
--- Config
-local MAX_DIST, FAIL_CD, SCAN = 3000, 6, 0.4
+--====================================================
+-- Anti AFK
+--====================================================
+P.Idled:Connect(function()
+	VirtualUser:Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+	task.wait(1)
+	VirtualUser:Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+end)
 
-local FRUIT = {
-	["Hie Hie Devil Fruit"]=true,
-	["Bomu Bomu Devil Fruit"]=true,
-	["Mochi Mochi Devil Fruit"]=true,
-	["Nikyu Nikyu Devil Fruit"]=true,
-	["Bari Bari Devil Fruit"]=true,
-}
-local BOX = {Box=true,Chest=true,Barrel=true}
-
--- State
-local S = {boxPick=false, fruitPick=false}
-local busy, bad = false, {}
-local FruitLog = {}
-
--- GUI
-pcall(function() CoreGui.AutoPickGui:Destroy() end)
-local gui = Instance.new("ScreenGui", CoreGui)
-gui.Name = "AutoPickGui"
-
-local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.new(0,200,0,270)
-frame.Position = UDim2.new(0,20,0,120)
-frame.BackgroundColor3 = Color3.fromRGB(35,35,35)
-frame.BorderSizePixel = 0
-
--- Toggles
-local function toggle(y,text,key)
-	local b=Instance.new("TextButton",frame)
-	b.Size=UDim2.new(1,-10,0,26)
-	b.Position=UDim2.new(0,5,0,y)
-	b.BackgroundColor3=Color3.fromRGB(60,60,60)
-	b.TextColor3=Color3.new(1,1,1)
-	b.BorderSizePixel=0
-	b.Text=text.."关"
-	b.MouseButton1Click:Connect(function()
-		S[key]=not S[key]
-		b.Text=text..(S[key] and "开" or "关")
+--====================================================
+-- Mobile Prompt Fix
+--====================================================
+if UIS.TouchEnabled then
+	PPS.PromptShown:Connect(function(p)
+		p.HoldDuration = 0
 	end)
 end
 
-toggle(10,"自动拾取箱子：","boxPick")
-toggle(40,"拾取果实：","fruitPick")
-
--- Close
-local close=Instance.new("TextButton",frame)
-close.Size=UDim2.new(0,22,0,22)
-close.Position=UDim2.new(1,-26,0,4)
-close.Text="X"
-close.BackgroundColor3=Color3.fromRGB(120,60,60)
-close.TextColor3=Color3.new(1,1,1)
-close.BorderSizePixel=0
-
--- List
-local list=Instance.new("ScrollingFrame",frame)
-list.Position=UDim2.new(0,5,0,80)
-list.Size=UDim2.new(1,-10,1,-85)
-list.ScrollBarThickness=6
-list.BackgroundColor3=Color3.fromRGB(28,28,28)
-list.BorderSizePixel=0
-
-local layout=Instance.new("UIListLayout",list)
-layout.Padding=UDim.new(0,4)
-
-local function nowTime()
-	local t=os.date("*t")
-	return string.format("%02d:%02d:%02d",t.hour,t.min,t.sec)
-end
-
-local function renderLog(name,time)
-	local l=Instance.new("TextLabel",list)
-	l.Size=UDim2.new(1,-4,0,20)
-	l.BackgroundTransparency=1
-	l.TextXAlignment=Left
-	l.Font=Enum.Font.SourceSansBold
-	l.TextSize=13
-	l.TextColor3=Color3.fromRGB(255,200,60)
-	l.Text=string.format("%s [%s]",name,time)
-end
-
-local function addFruit(name)
-	local time=nowTime()
-	table.insert(FruitLog,{name=name,time=time})
-	renderLog(name,time)
-	task.wait()
-	list.CanvasSize=UDim2.new(0,0,0,layout.AbsoluteContentSize.Y)
-end
-
--- Icon
-local icon=Instance.new("TextButton",gui)
-icon.Size=UDim2.new(0,44,0,44)
-icon.Position=UDim2.new(0,20,0,120)
-icon.Text="🍎"
-icon.Visible=false
-icon.BackgroundColor3=Color3.fromRGB(60,60,60)
-icon.TextColor3=Color3.new(1,1,1)
-icon.BorderSizePixel=0
-Instance.new("UICorner",icon).CornerRadius=UDim.new(1,0)
-
-close.MouseButton1Click:Connect(function()
-	frame.Visible=false
-	icon.Visible=true
-end)
-
-icon.MouseButton1Click:Connect(function()
-	frame.Visible=true
-	icon.Visible=false
-end)
-
--- Touch drag
-local dragging,startPos,startTouch=false
-icon.InputBegan:Connect(function(i)
-	if i.UserInputType==Enum.UserInputType.Touch then
-		dragging=true
-		startPos=icon.Position
-		startTouch=i.Position
-	end
-end)
-icon.InputEnded:Connect(function(i)
-	if i.UserInputType==Enum.UserInputType.Touch then dragging=false end
-end)
-UIS.InputChanged:Connect(function(i)
-	if dragging and i.UserInputType==Enum.UserInputType.Touch then
-		local d=i.Position-startTouch
-		icon.Position=UDim2.new(
-			startPos.X.Scale,startPos.X.Offset+d.X,
-			startPos.Y.Scale,startPos.Y.Offset+d.Y
-		)
-	end
-end)
-
+--====================================================
 -- Utils
+--====================================================
 local function HRP()
 	return (P.Character or P.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
 end
 
-local function getType(pp)
-	local c=pp.Parent
-	while c do
-		if FRUIT[c.Name] then return "fruit",c end
-		if BOX[c.Name] then return "box",c end
-		c=c.Parent
-	end
-end
+--====================================================
+-- ================= 主 GUI =================
+--====================================================
+pcall(function() CoreGui.MainGui:Destroy() end)
+local mainGui = Instance.new("ScreenGui", CoreGui)
+mainGui.Name = "MainGui"
 
-local function markFruit(m)
-	local p=m:FindFirstChildWhichIsA("BasePart",true)
-	if not p or p:FindFirstChild("FruitTag") then return end
-	local g=Instance.new("BillboardGui",p)
-	g.Name="FruitTag"
-	g.Size=UDim2.new(0,200,0,36)
-	g.StudsOffset=Vector3.new(0,3,0)
-	g.AlwaysOnTop=true
-	local t=Instance.new("TextLabel",g)
-	t.Size=UDim2.fromScale(1,1)
-	t.BackgroundTransparency=1
-	t.Text=m.Name
-	t.TextScaled=true
-	t.Font=Enum.Font.SourceSansBold
-	t.TextStrokeTransparency=0.2
-	t.TextColor3=Color3.fromRGB(255,200,60)
-	m.AncestryChanged:Connect(function(_,p) if not p then g:Destroy() end end)
-end
+local main = Instance.new("Frame", mainGui)
+main.Size = UDim2.new(0,220,0,240)
+main.Position = UDim2.new(0,20,0,120)
+main.BackgroundColor3 = Color3.fromRGB(35,35,35)
+main.BorderSizePixel = 0
 
-local function bestPrompt()
-	local hrp,best,dist,now=HRP(),nil,math.huge,os.clock()
-	for _,pp in ipairs(workspace:GetDescendants()) do
-		if not (pp:IsA("ProximityPrompt") and pp.Enabled) then continue end
-		if bad[pp] and bad[pp]>now then continue end
+-- Close main → clear data
+local closeMain = Instance.new("TextButton", main)
+closeMain.Size = UDim2.new(0,22,0,22)
+closeMain.Position = UDim2.new(1,-26,0,4)
+closeMain.Text = "X"
+closeMain.BackgroundColor3 = Color3.fromRGB(140,60,60)
 
-		local kind=getType(pp)
-		if kind=="box" and not S.boxPick then continue end
-		if kind=="fruit" and not S.fruitPick then continue end
-		if not kind then continue end
+--====================================================
+-- 坐标数据（只在主 GUI 关闭时清空）
+--====================================================
+local TP_DATA = {}
+local TP_ID = 0
 
-		local part=pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
-		if part:IsA("BasePart") then
-			local d=(hrp.Position-part.Position).Magnitude
-			if d<=MAX_DIST and d<dist then best,dist=pp,d end
+--====================================================
+-- 坐标子 GUI
+--====================================================
+local tpGui = Instance.new("ScreenGui", CoreGui)
+tpGui.Name = "TPGui"
+tpGui.Enabled = false
+
+local tpFrame = Instance.new("Frame", tpGui)
+tpFrame.Size = UDim2.new(0,260,0,300)
+tpFrame.Position = UDim2.new(0.5,-130,0.5,-150)
+tpFrame.BackgroundColor3 = Color3.fromRGB(35,35,35)
+
+local tpTop = Instance.new("Frame", tpFrame)
+tpTop.Size = UDim2.new(1,0,0,30)
+tpTop.BackgroundColor3 = Color3.fromRGB(25,25,25)
+
+local tpMin = Instance.new("TextButton", tpTop)
+tpMin.Size = UDim2.new(0,30,0,22)
+tpMin.Position = UDim2.new(1,-64,0,4)
+tpMin.Text = "-"
+
+local tpClose = Instance.new("TextButton", tpTop)
+tpClose.Size = UDim2.new(0,30,0,22)
+tpClose.Position = UDim2.new(1,-34,0,4)
+tpClose.Text = "X"
+
+local tpContent = Instance.new("Frame", tpFrame)
+tpContent.Position = UDim2.new(0,5,0,35)
+tpContent.Size = UDim2.new(1,-10,1,-40)
+tpContent.BackgroundTransparency = 1
+
+local layout = Instance.new("UIListLayout", tpContent)
+layout.Padding = UDim.new(0,5)
+
+local saveBtn = Instance.new("TextButton", tpContent)
+saveBtn.Size = UDim2.new(1,0,0,32)
+saveBtn.Text = "保存当前坐标"
+saveBtn.BackgroundColor3 = Color3.fromRGB(70,130,180)
+
+--====================================================
+-- Drag
+--====================================================
+local function drag(handle, target)
+	local d, sp, tp
+	handle.InputBegan:Connect(function(i)
+		if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+			d=true sp=i.Position tp=target.Position
 		end
-	end
-	return best
-end
-
-local function pick(pp)
-	busy=true
-	local part=pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
-	HRP().CFrame=part.CFrame*CFrame.new(0,0,2)
-	task.wait(0.15)
-	if fireproximityprompt then fireproximityprompt(pp) end
-	task.wait(0.25)
-	if pp.Parent then bad[pp]=os.clock()+FAIL_CD end
-	busy=false
-end
-
-task.spawn(function()
-	while task.wait(SCAN) do
-		if not busy then
-			local pp=bestPrompt()
-			if pp then pick(pp) end
+	end)
+	handle.InputEnded:Connect(function(i)
+		if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+			d=false
 		end
+	end)
+	handle.InputChanged:Connect(function(i)
+		if d and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
+			local v=i.Position-sp
+			target.Position=UDim2.new(tp.X.Scale,tp.X.Offset+v.X,tp.Y.Scale,tp.Y.Offset+v.Y)
+		end
+	end)
+end
+drag(tpTop, tpFrame)
+
+--====================================================
+-- 坐标保存 & 传送
+--====================================================
+local function refreshTP()
+	for _,c in ipairs(tpContent:GetChildren()) do
+		if c:IsA("Frame") then c:Destroy() end
 	end
-end)
 
--- ✅ 修正后的果实生成监听（唯一修改点）
-workspace.DescendantAdded:Connect(function(o)
-	if not o:IsA("ProximityPrompt") then return end
+	for i,v in ipairs(TP_DATA) do
+		local row = Instance.new("Frame", tpContent)
+		row.Size = UDim2.new(1,0,0,30)
+		row.BackgroundTransparency = 1
 
-	task.wait(0.2)
+		local tp = Instance.new("TextButton", row)
+		tp.Size = UDim2.new(1,-34,1,0)
+		tp.Text = v.name
+		tp.BackgroundColor3 = Color3.fromRGB(60,60,60)
 
-	local kind, model = getType(o)
-	if kind ~= "fruit" then return end
-	if not model or not model:IsA("Model") then return end
-	if model:FindFirstChild("_Logged") then return end
+		local del = Instance.new("TextButton", row)
+		del.Size = UDim2.new(0,30,1,0)
+		del.Position = UDim2.new(1,-30,0,0)
+		del.Text = "X"
+		del.BackgroundColor3 = Color3.fromRGB(170,60,60)
 
-	Instance.new("BoolValue", model).Name = "_Logged"
-	markFruit(model)
-	addFruit(model.Name)
-end)
+		tp.MouseButton1Click:Connect(function()
+			HRP().CFrame = v.cf
+		end)
 
--- Anti AFK
-task.spawn(function()
-	while true do
-		task.wait(60)
-		pcall(function()
-			VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-			task.wait(0.1)
-			VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+		del.MouseButton1Click:Connect(function()
+			table.remove(TP_DATA,i)
+			refreshTP()
 		end)
 	end
+end
+
+saveBtn.MouseButton1Click:Connect(function()
+	TP_ID += 1
+	table.insert(TP_DATA,{
+		name="坐标 "..TP_ID,
+		cf=HRP().CFrame
+	})
+	refreshTP()
 end)
+
+tpClose.MouseButton1Click:Connect(function()
+	tpGui.Enabled = false
+end)
+
+tpMin.MouseButton1Click:Connect(function()
+	tpFrame.Visible = false
+end)
+
+--====================================================
+-- 主 GUI 坐标按钮
+--====================================================
+local openTP = Instance.new("TextButton", main)
+openTP.Size = UDim2.new(1,-10,0,30)
+openTP.Position = UDim2.new(0,5,0,40)
+openTP.Text = "坐标传送面板"
+openTP.BackgroundColor3 = Color3.fromRGB(70,130,180)
+
+openTP.MouseButton1Click:Connect(function()
+	tpGui.Enabled = true
+	tpFrame.Visible = true
+end)
+
+--====================================================
+-- 主 GUI 关闭 → 清空数据
+--====================================================
+closeMain.MouseButton1Click:Connect(function()
+	TP_DATA = {}
+	tpGui:Destroy()
+	mainGui:Destroy()
+end)
+
+warn("✅ 最终增强整合版已加载（Anti-AFK + 子TP GUI）")
