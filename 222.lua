@@ -202,8 +202,46 @@ task.spawn(function()
 		local hrp = HRP()
 		local best, dist = nil, math.huge
 
+		--====================================================
+-- 自动拾取（长按 Prompt 修复版｜手机稳定）
+--====================================================
+local FRUIT = {
+	["Hie Hie Devil Fruit"]=true,
+	["Bomu Bomu Devil Fruit"]=true,
+	["Mochi Mochi Devil Fruit"]=true,
+	["Nikyu Nikyu Devil Fruit"]=true,
+	["Bari Bari Devil Fruit"]=true,
+}
+local BOX = {Box=true,Chest=true,Barrel=true}
+
+local busy = false
+local MAX_DIST = 3000
+local SCAN = 0.4
+
+local function getType(pp)
+	local c = pp.Parent
+	while c do
+		if FRUIT[c.Name] then return "fruit", c end
+		if BOX[c.Name] then return "box", c end
+		c = c.Parent
+	end
+end
+
+task.spawn(function()
+	while true do
+		task.wait(SCAN)
+		if busy then continue end
+
+		local hrp = HRP()
+		local best, dist = nil, math.huge
+
 		for _,pp in ipairs(workspace:GetDescendants()) do
 			if pp:IsA("ProximityPrompt") and pp.Enabled then
+				-- ⭐ 核心：强制去掉长按
+				if pp.HoldDuration > 0 then
+					pp.HoldDuration = 0
+				end
+
 				local kind, model = getType(pp)
 				if kind == "fruit" and not State.fruit then continue end
 				if kind == "box" and not State.box then continue end
@@ -222,12 +260,17 @@ task.spawn(function()
 
 		if best then
 			busy = true
+
 			local part = best.Parent:IsA("Attachment") and best.Parent.Parent or best.Parent
 			HRP().CFrame = part.CFrame * CFrame.new(0,0,2)
+
 			task.wait(0.15)
+
+			-- ⭐ 核心：模拟“完成长按”
 			if fireproximityprompt then
-				fireproximityprompt(best)
+				fireproximityprompt(best, 0)
 			end
+
 			task.wait(0.3)
 			busy = false
 		end
