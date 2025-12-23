@@ -210,6 +210,10 @@ local BOX = {Box=true,Chest=true,Barrel=true}
 local busy = false
 local MAX_DIST = 3000
 local SCAN = 0.4
+--====================================================
+-- ProximityPrompt 缓存
+--====================================================
+local PromptCache = {}
 
 local function getType(pp)
 	local c = pp.Parent
@@ -243,25 +247,49 @@ local function addFruitLog(name)
 	task.wait()
 	logList.CanvasSize = UDim2.new(0,0,0,logLayout.AbsoluteContentSize.Y)
 end
+--====================================================
+-- Prompt 缓存维护
+--====================================================
+local function addPrompt(pp)
+	if not pp:IsA("ProximityPrompt") then return end
+	PromptCache[pp] = true
+end
+
+local function removePrompt(pp)
+	PromptCache[pp] = nil
+end
+
+-- 初始化已有 Prompt
+for _,obj in ipairs(workspace:GetDescendants()) do
+	if obj:IsA("ProximityPrompt") then
+		addPrompt(obj)
+	end
+end
+
+-- 动态更新
+workspace.DescendantAdded:Connect(addPrompt)
+workspace.DescendantRemoving:Connect(removePrompt)
 
 task.spawn(function()
 	while true do
-		task.wait(SCAN)
+		task.wait(busy and 0.1 or SCAN)
 		if busy then continue end
 
 		local hrp = HRP()
 		local best, dist = nil, math.huge
 
-		for _,pp in ipairs(workspace:GetDescendants()) do
+		for pp,_ in pairs(PromptCache) do
 			if pp:IsA("ProximityPrompt") and pp.Enabled then
 				if pp.HoldDuration > 0 then
 					pp.HoldDuration = 0
 				end
 
 				local kind, model = getType(pp)
+				if not kind then continue end
+
 				if kind == "fruit" and not State.fruit then continue end
 				if kind == "box" and not State.box then continue end
-				if not kind then continue end
+
 
 				local part = pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
 				if part:IsA("BasePart") then
