@@ -14,22 +14,13 @@ repeat
 until PlayerGui
 
 --====================================================
--- Anti AFK（稳定）
+-- Anti AFK
 --====================================================
 P.Idled:Connect(function()
 	VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
 	task.wait(1)
 	VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
 end)
-
---====================================================
--- Mobile Prompt Fix（只在显示时修正一次）【修复点】
---====================================================
-if UIS.TouchEnabled then
-	PPS.PromptShown:Connect(function(p)
-		p.HoldDuration = 0
-	end)
-end
 
 --====================================================
 -- Utils
@@ -91,7 +82,7 @@ do
 end
 
 --====================================================
--- 关闭按钮（关闭即清除全部数据）
+-- 关闭按钮
 --====================================================
 local close = Instance.new("TextButton", top)
 close.Size = UDim2.new(0,28,0,22)
@@ -107,7 +98,6 @@ end)
 --====================================================
 local State = {box=false, fruit=false}
 local saveId = 0
-local FruitLog = {}
 
 --====================================================
 -- Toggle
@@ -129,7 +119,7 @@ toggle(40,"自动拾取箱子：","box")
 toggle(70,"自动拾取果实：","fruit")
 
 --====================================================
--- TP 面板
+-- 坐标传送面板
 --====================================================
 local openTP = Instance.new("TextButton", frame)
 openTP.Size = UDim2.new(1,-10,0,28)
@@ -168,28 +158,6 @@ save.MouseButton1Click:Connect(function()
 end)
 
 --====================================================
--- 果实记录 GUI
---====================================================
-local logTitle = Instance.new("TextLabel", frame)
-logTitle.Size = UDim2.new(1,-10,0,22)
-logTitle.Position = UDim2.new(0,5,0,325)
-logTitle.Text = "果实生成记录"
-logTitle.TextColor3 = Color3.fromRGB(255,200,60)
-logTitle.BackgroundTransparency = 1
-logTitle.TextXAlignment = Left
-
-local logList = Instance.new("ScrollingFrame", frame)
-logList.Position = UDim2.new(0,5,0,350)
-logList.Size = UDim2.new(1,-10,0,0)
-logList.CanvasSize = UDim2.new(0,0,0,0)
-logList.ScrollBarThickness = 6
-logList.BackgroundColor3 = Color3.fromRGB(28,28,28)
-logList.BorderSizePixel = 0
-
-local logLayout = Instance.new("UIListLayout", logList)
-logLayout.Padding = UDim.new(0,4)
-
---====================================================
 -- 自动拾取配置
 --====================================================
 local FRUIT = {
@@ -199,14 +167,15 @@ local FRUIT = {
 	["Nikyu Nikyu Devil Fruit"]=true,
 	["Bari Bari Devil Fruit"]=true,
 }
-local BOX = {Box=true,Chest=true,Barrel=true}
 
-local MAX_DIST = 3000
-local SCAN = 0.4
-local busy = false
+local BOX = {
+	Box=true,
+	Chest=true,
+	Barrel=true,
+}
 
 --====================================================
--- Prompt 缓存（稳定版）【修复点】
+-- Prompt 缓存
 --====================================================
 local PromptCache = {}
 
@@ -229,87 +198,86 @@ end
 workspace.DescendantAdded:Connect(addPrompt)
 workspace.DescendantRemoving:Connect(removePrompt)
 
+--====================================================
+-- Prompt 类型判断（修复版）
+--====================================================
 local function getType(pp)
 	local c = pp.Parent
 	while c do
-		-- 模型名判断
 		if FRUIT[c.Name] then
 			return "fruit", c
 		end
 		if BOX[c.Name] then
 			return "box", c
 		end
-
-		-- Prompt 行为文本兜底（非常重要）
 		if pp.ActionText then
 			local t = string.lower(pp.ActionText)
-			if t:find("pick") or t:find("collect") or t:find("fruit") then
+			if t:find("pick") or t:find("fruit") then
 				return "fruit", c
 			end
-			if t:find("open") or t:find("search") then
+			if t:find("open") then
 				return "box", c
 			end
 		end
-
 		c = c.Parent
 	end
 end
 
+--====================================================
+-- 自动拾取主循环（已修复）
+--====================================================
+local busy = false
+local MAX_DIST = 3000
+local SCAN = 0.35
 
---====================================================
--- 自动拾取循环（缓存 + 防锁死）【核心修复】
---====================================================
 task.spawn(function()
 	while true do
 		task.wait(busy and 0.1 or SCAN)
 		if busy then continue end
 
 		local hrp = HRP()
-		local best, dist = nil, math.huge
+		local best, bestDist
 
 		for pp,_ in pairs(PromptCache) do
-			if not pp.Parent then
+			if not pp.Parent or not pp.Enabled then
 				PromptCache[pp] = nil
 				continue
 			end
-			if not pp.Enabled then continue end
 
-			local kind = getType(pp)
+			local kind, model = getType(pp)
 			if not kind then continue end
 			if kind == "fruit" and not State.fruit then continue end
 			if kind == "box" and not State.box then continue end
 
-			local part = pp.Parent:IsA("Attachment") and pp.Parent.Parent
+			local part =
+				pp.Parent:IsA("Attachment") and pp.Parent.Parent
 				or pp.Parent:IsA("BasePart") and pp.Parent
 				or pp:FindFirstAncestorWhichIsA("BasePart")
-			if not part then continue end
 
-			if part:IsA("BasePart") then
+			if part then
 				local d = (hrp.Position - part.Position).Magnitude
-				if d < dist and d <= MAX_DIST then
-					best = pp
-					dist = d
+				if d <= MAX_DIST and (not bestDist or d < bestDist) then
+					best = {pp = pp, part = part}
+					bestDist = d
 				end
 			end
 		end
 
 		if best then
 			busy = true
-			task.delay(1, function() busy = false end)
-
 			pcall(function()
-				local part = best.Parent:IsA("Attachment") and best.Parent.Parent or best.Parent
-				HRP().CFrame = part.CFrame * CFrame.new(0,0,2)
-				task.wait(0.15)
+				HRP().CFrame = best.part.CFrame * CFrame.new(0,0,2)
+				task.wait(0.1)
+				best.pp.HoldDuration = 0
 				if fireproximityprompt then
-					fireproximityprompt(best, 0)
+					fireproximityprompt(best.pp, 0)
 				end
 			end)
-
-			task.wait(0.3)
-			busy = false
+			task.delay(0.35, function()
+				busy = false
+			end)
 		end
 	end
 end)
 
-warn("✅ 手机 · 缓存稳定 · 最终整合版 已加载")
+warn("✅ 自动拾取 · 坐标 · GUI · 全部已稳定运行")
