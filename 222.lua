@@ -302,7 +302,7 @@ task.spawn(function()
 		local hrp = HRP()
 		local best, dist = nil, math.huge
 
-		for _,pp in ipairs(workspace:GetDescendants()) do
+		for _, pp in ipairs(workspace:GetDescendants()) do
 			if not (pp:IsA("ProximityPrompt") and pp.Enabled) then
 				continue
 			end
@@ -312,8 +312,11 @@ task.spawn(function()
 			if kind == "fruit" and not State.fruit then continue end
 			if kind == "box" and not State.box then continue end
 
-			local part = pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
-			if part:IsA("BasePart") then
+			local part =
+				pp.Parent:IsA("Attachment") and pp.Parent.Parent
+				or pp.Parent
+
+			if part and part:IsA("BasePart") then
 				local d = (hrp.Position - part.Position).Magnitude
 				if d <= MAX_DIST and d < dist then
 					best, dist = pp, d
@@ -324,19 +327,24 @@ task.spawn(function()
 		if best then
 			busy = true
 
-			local part = best.Parent:IsA("Attachment") and best.Parent.Parent or best.Parent
-			HRP().CFrame = part.CFrame * CFrame.new(0,0,2)
-			task.wait(0.15)
+			local part =
+				best.Parent:IsA("Attachment") and best.Parent.Parent
+				or best.Parent
 
-			if fireproximityprompt then
-				fireproximityprompt(best)
-			end
+			pcall(function()
+				HRP().CFrame = part.CFrame * CFrame.new(0,0,2)
+				task.wait(0.15)
+				if fireproximityprompt then
+					fireproximityprompt(best)
+				end
+			end)
 
 			task.wait(0.25)
 			busy = false
 		end
 	end
 end)
+
 
 
 -- 果实生成监听
