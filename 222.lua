@@ -10,7 +10,7 @@ local P = Players.LocalPlayer
 local PlayerGui = P:WaitForChild("PlayerGui")
 
 --====================================================
--- Anti AFK（最原始稳定写法）
+-- Anti AFK（稳定）
 --====================================================
 P.Idled:Connect(function()
 	VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
@@ -19,7 +19,7 @@ P.Idled:Connect(function()
 end)
 
 --====================================================
--- Mobile Prompt Fix
+-- Mobile Prompt Fix（长按 → 立即）
 --====================================================
 if UIS.TouchEnabled then
 	PPS.PromptShown:Connect(function(p)
@@ -35,14 +35,14 @@ local function HRP()
 end
 
 --====================================================
--- 清理旧 GUI（简单粗暴）
+-- 清理旧 GUI
 --====================================================
 pcall(function()
 	PlayerGui:FindFirstChild("StableGui"):Destroy()
 end)
 
 --====================================================
--- 唯一 ScreenGui（关键）
+-- 唯一 ScreenGui（手机最稳）
 --====================================================
 local gui = Instance.new("ScreenGui")
 gui.Name = "StableGui"
@@ -62,7 +62,7 @@ top.Size = UDim2.new(1,0,0,30)
 top.BackgroundColor3 = Color3.fromRGB(25,25,25)
 
 --====================================================
--- 拖动（直接写，不封装）
+-- 拖动
 --====================================================
 do
 	local dragging, sp, fp
@@ -87,7 +87,7 @@ do
 end
 
 --====================================================
--- 关闭按钮（关闭即清数据）
+-- 关闭按钮（清数据）
 --====================================================
 local close = Instance.new("TextButton", top)
 close.Size = UDim2.new(0,28,0,22)
@@ -99,11 +99,10 @@ close.BackgroundColor3 = Color3.fromRGB(150,60,60)
 -- 状态
 --====================================================
 local State = {box=false, fruit=false}
-local Saved = {}
 local saveId = 0
 
 --====================================================
--- Toggle Buttons
+-- Toggle
 --====================================================
 local function toggle(y,text,key)
 	local b = Instance.new("TextButton", frame)
@@ -131,7 +130,7 @@ openTP.Text = "坐标传送面板"
 openTP.BackgroundColor3 = Color3.fromRGB(70,130,180)
 
 --====================================================
--- TP 子窗口（Frame，不是 ScreenGui）
+-- TP 子窗口（Frame）
 --====================================================
 local tp = Instance.new("Frame", frame)
 tp.Size = UDim2.new(1,-10,0,180)
@@ -144,8 +143,8 @@ save.Size = UDim2.new(1,0,0,28)
 save.Text = "保存当前位置"
 save.BackgroundColor3 = Color3.fromRGB(80,140,200)
 
-local list = Instance.new("UIListLayout", tp)
-list.Padding = UDim.new(0,4)
+local layout = Instance.new("UIListLayout", tp)
+layout.Padding = UDim.new(0,4)
 
 openTP.MouseButton1Click:Connect(function()
 	tp.Visible = not tp.Visible
@@ -165,11 +164,10 @@ end)
 
 close.MouseButton1Click:Connect(function()
 	gui:Destroy()
-	Saved = {}
 end)
 
 --====================================================
--- 自动拾取（长按 Prompt 修复版｜手机稳定）
+-- 自动拾取（长按 Prompt 修复版）
 --====================================================
 local FRUIT = {
 	["Hie Hie Devil Fruit"]=true,
@@ -203,12 +201,11 @@ task.spawn(function()
 
 		for _,pp in ipairs(workspace:GetDescendants()) do
 			if pp:IsA("ProximityPrompt") and pp.Enabled then
-				-- ⭐ 核心：强制去掉长按
 				if pp.HoldDuration > 0 then
 					pp.HoldDuration = 0
 				end
 
-				local kind, model = getType(pp)
+				local kind = getType(pp)
 				if kind == "fruit" and not State.fruit then continue end
 				if kind == "box" and not State.box then continue end
 				if not kind then continue end
@@ -226,19 +223,16 @@ task.spawn(function()
 
 		if best then
 			busy = true
-
 			local part = best.Parent:IsA("Attachment") and best.Parent.Parent or best.Parent
 			HRP().CFrame = part.CFrame * CFrame.new(0,0,2)
-
 			task.wait(0.15)
-
-			-- ⭐ 核心：模拟“完成长按”
 			if fireproximityprompt then
 				fireproximityprompt(best, 0)
 			end
-
 			task.wait(0.3)
 			busy = false
 		end
 	end
 end)
+
+warn("✅ 手机稳定 · 最终整合版 已加载")
