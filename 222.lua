@@ -7,6 +7,16 @@ local UIS = game:GetService("UserInputService")
 local P = Players.LocalPlayer
 
 --====================================================
+-- Anti AFK
+--====================================================
+local VirtualUser = game:GetService("VirtualUser")
+
+P.Idled:Connect(function()
+	VirtualUser:CaptureController()
+	VirtualUser:ClickButton2(Vector2.new(0,0))
+end)
+
+--====================================================
 -- Config（方案 A）
 --====================================================
 local MAX_DIST, FAIL_CD, SCAN = 3000, 6, 0.4
