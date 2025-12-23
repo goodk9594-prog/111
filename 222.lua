@@ -5,9 +5,6 @@ local UIS = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
 local P = Players.LocalPlayer
 
--- ===== Global Run Switch =====
-local RUNNING = true
-
 -- Config
 local MAX_DIST, FAIL_CD, SCAN = 3000, 6, 0.4
 
@@ -25,31 +22,18 @@ local S = {boxPick=false, fruitPick=false}
 local busy, bad = false, {}
 local FruitLog = {}
 
--- ===== GUI =====
+-- GUI
 pcall(function() CoreGui.AutoPickGui:Destroy() end)
 local gui = Instance.new("ScreenGui", CoreGui)
 gui.Name = "AutoPickGui"
 
 local frame = Instance.new("Frame", gui)
 frame.Size = UDim2.new(0,200,0,270)
+frame.Position = UDim2.new(0,20,0,120)
 frame.BackgroundColor3 = Color3.fromRGB(35,35,35)
 frame.BorderSizePixel = 0
 
--- ===== Minimize Icon =====
-local icon = Instance.new("TextButton", gui)
-icon.Size = UDim2.new(0,44,0,44)
-icon.Text = "🍎"
-icon.Visible = false
-icon.BackgroundColor3 = Color3.fromRGB(60,60,60)
-icon.TextColor3 = Color3.new(1,1,1)
-icon.BorderSizePixel = 0
-Instance.new("UICorner",icon).CornerRadius = UDim.new(1,0)
-
--- 初始位置
-icon.Position = UDim2.new(0,20,0,120)
-frame.Position = icon.Position + UDim2.new(0,0,0,50)
-
--- ===== Toggle Buttons =====
+-- Toggles
 local function toggle(y,text,key)
 	local b=Instance.new("TextButton",frame)
 	b.Size=UDim2.new(1,-10,0,26)
@@ -67,48 +51,72 @@ end
 toggle(10,"自动拾取箱子：","boxPick")
 toggle(40,"拾取果实：","fruitPick")
 
--- ===== Close / Minimize / Kill =====
+-- Close
 local close=Instance.new("TextButton",frame)
 close.Size=UDim2.new(0,22,0,22)
 close.Position=UDim2.new(1,-26,0,4)
 close.Text="X"
-close.BackgroundColor3=Color3.fromRGB(140,60,60)
+close.BackgroundColor3=Color3.fromRGB(120,60,60)
 close.TextColor3=Color3.new(1,1,1)
 close.BorderSizePixel=0
 
--- 短按：最小化 ｜ 长按1秒：彻底关闭
-local pressTime
-close.InputBegan:Connect(function(i)
-	if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
-		pressTime = os.clock()
-	end
+-- List
+local list=Instance.new("ScrollingFrame",frame)
+list.Position=UDim2.new(0,5,0,80)
+list.Size=UDim2.new(1,-10,1,-85)
+list.ScrollBarThickness=6
+list.BackgroundColor3=Color3.fromRGB(28,28,28)
+list.BorderSizePixel=0
+
+local layout=Instance.new("UIListLayout",list)
+layout.Padding=UDim.new(0,4)
+
+local function nowTime()
+	local t=os.date("*t")
+	return string.format("%02d:%02d:%02d",t.hour,t.min,t.sec)
+end
+
+local function renderLog(name,time)
+	local l=Instance.new("TextLabel",list)
+	l.Size=UDim2.new(1,-4,0,20)
+	l.BackgroundTransparency=1
+	l.TextXAlignment=Left
+	l.Font=Enum.Font.SourceSansBold
+	l.TextSize=13
+	l.TextColor3=Color3.fromRGB(255,200,60)
+	l.Text=string.format("%s [%s]",name,time)
+end
+
+local function addFruit(name)
+	local time=nowTime()
+	table.insert(FruitLog,{name=name,time=time})
+	renderLog(name,time)
+	task.wait()
+	list.CanvasSize=UDim2.new(0,0,0,layout.AbsoluteContentSize.Y)
+end
+
+-- Icon
+local icon=Instance.new("TextButton",gui)
+icon.Size=UDim2.new(0,44,0,44)
+icon.Position=UDim2.new(0,20,0,120)
+icon.Text="🍎"
+icon.Visible=false
+icon.BackgroundColor3=Color3.fromRGB(60,60,60)
+icon.TextColor3=Color3.new(1,1,1)
+icon.BorderSizePixel=0
+Instance.new("UICorner",icon).CornerRadius=UDim.new(1,0)
+
+close.MouseButton1Click:Connect(function()
+	frame.Visible=false
+	icon.Visible=true
 end)
 
-close.InputEnded:Connect(function(i)
-	if not pressTime then return end
-	local held = os.clock() - pressTime
-	pressTime = nil
-
-	if held > 1 then
-		-- 🔴 完全关闭脚本
-		RUNNING = false
-		gui:Destroy()
-	else
-		-- 🟡 最小化
-		icon.Position = frame.Position
-		frame.Visible = false
-		icon.Visible = true
-	end
-end)
-
--- 图标展开（跟随位置）
 icon.MouseButton1Click:Connect(function()
-	frame.Position = icon.Position + UDim2.new(0,0,0,50)
-	frame.Visible = true
-	icon.Visible = false
+	frame.Visible=true
+	icon.Visible=false
 end)
 
--- ===== Touch Drag Icon =====
+-- Touch drag
 local dragging,startPos,startTouch=false
 icon.InputBegan:Connect(function(i)
 	if i.UserInputType==Enum.UserInputType.Touch then
@@ -130,7 +138,7 @@ UIS.InputChanged:Connect(function(i)
 	end
 end)
 
--- ===== Utils =====
+-- Utils
 local function HRP()
 	return (P.Character or P.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
 end
@@ -144,47 +152,84 @@ local function getType(pp)
 	end
 end
 
--- ===== Main Loop =====
-task.spawn(function()
-	while RUNNING do
-		task.wait(SCAN)
-		if busy then continue end
+local function markFruit(m)
+	local p=m:FindFirstChildWhichIsA("BasePart",true)
+	if not p or p:FindFirstChild("FruitTag") then return end
+	local g=Instance.new("BillboardGui",p)
+	g.Name="FruitTag"
+	g.Size=UDim2.new(0,200,0,36)
+	g.StudsOffset=Vector3.new(0,3,0)
+	g.AlwaysOnTop=true
+	local t=Instance.new("TextLabel",g)
+	t.Size=UDim2.fromScale(1,1)
+	t.BackgroundTransparency=1
+	t.Text=m.Name
+	t.TextScaled=true
+	t.Font=Enum.Font.SourceSansBold
+	t.TextStrokeTransparency=0.2
+	t.TextColor3=Color3.fromRGB(255,200,60)
+	m.AncestryChanged:Connect(function(_,p) if not p then g:Destroy() end end)
+end
 
-		local hrp=HRP()
-		local best,dist=nil,math.huge
+local function bestPrompt()
+	local hrp,best,dist,now=HRP(),nil,math.huge,os.clock()
+	for _,pp in ipairs(workspace:GetDescendants()) do
+		if not (pp:IsA("ProximityPrompt") and pp.Enabled) then continue end
+		if bad[pp] and bad[pp]>now then continue end
 
-		for _,pp in ipairs(workspace:GetDescendants()) do
-			if not (pp:IsA("ProximityPrompt") and pp.Enabled) then continue end
-			if bad[pp] and bad[pp]>os.clock() then continue end
+		local kind=getType(pp)
+		if kind=="box" and not S.boxPick then continue end
+		if kind=="fruit" and not S.fruitPick then continue end
+		if not kind then continue end
 
-			local t,_=getType(pp)
-			if t=="box" and not S.boxPick then continue end
-			if t=="fruit" and not S.fruitPick then continue end
-			if not t then continue end
-
-			local part=pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
-			if part:IsA("BasePart") then
-				local d=(hrp.Position-part.Position).Magnitude
-				if d<=MAX_DIST and d<dist then dist,best=d,pp end
-			end
+		local part=pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
+		if part:IsA("BasePart") then
+			local d=(hrp.Position-part.Position).Magnitude
+			if d<=MAX_DIST and d<dist then best,dist=pp,d end
 		end
+	end
+	return best
+end
 
-		if best then
-			busy=true
-			local part=best.Parent:IsA("Attachment") and best.Parent.Parent or best.Parent
-			hrp.CFrame=part.CFrame*CFrame.new(0,0,2)
-			task.wait(0.15)
-			if fireproximityprompt then fireproximityprompt(best) end
-			task.wait(0.25)
-			if best.Parent then bad[best]=os.clock()+FAIL_CD end
-			busy=false
+local function pick(pp)
+	busy=true
+	local part=pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
+	HRP().CFrame=part.CFrame*CFrame.new(0,0,2)
+	task.wait(0.15)
+	if fireproximityprompt then fireproximityprompt(pp) end
+	task.wait(0.25)
+	if pp.Parent then bad[pp]=os.clock()+FAIL_CD end
+	busy=false
+end
+
+task.spawn(function()
+	while task.wait(SCAN) do
+		if not busy then
+			local pp=bestPrompt()
+			if pp then pick(pp) end
 		end
 	end
 end)
 
--- ===== Anti AFK =====
+-- ✅ 修正后的果实生成监听（唯一修改点）
+workspace.DescendantAdded:Connect(function(o)
+	if not o:IsA("ProximityPrompt") then return end
+
+	task.wait(0.2)
+
+	local kind, model = getType(o)
+	if kind ~= "fruit" then return end
+	if not model or not model:IsA("Model") then return end
+	if model:FindFirstChild("_Logged") then return end
+
+	Instance.new("BoolValue", model).Name = "_Logged"
+	markFruit(model)
+	addFruit(model.Name)
+end)
+
+-- Anti AFK
 task.spawn(function()
-	while RUNNING do
+	while true do
 		task.wait(60)
 		pcall(function()
 			VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
