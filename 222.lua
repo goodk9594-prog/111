@@ -174,7 +174,10 @@ layout.Padding = UDim.new(0,4)
 
 openTP.MouseButton1Click:Connect(function()
 	tp.Visible = not tp.Visible
+	logTitle.Visible = not tp.Visible
+	logList.Visible = not tp.Visible
 end)
+
 
 save.MouseButton1Click:Connect(function()
 	saveId += 1
@@ -255,7 +258,7 @@ task.spawn(function()
 					pp.HoldDuration = 0
 				end
 
-				local kind = getType(pp)
+				local kind, model = getType(pp)
 				if kind == "fruit" and not State.fruit then continue end
 				if kind == "box" and not State.box then continue end
 				if not kind then continue end
