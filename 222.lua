@@ -23,7 +23,7 @@ P.Idled:Connect(function()
 end)
 
 --====================================================
--- Mobile Prompt Fix（长按 → 立即）
+-- Mobile Prompt Fix（只在显示时修正一次）【修复点】
 --====================================================
 if UIS.TouchEnabled then
 	PPS.PromptShown:Connect(function(p)
@@ -46,7 +46,7 @@ pcall(function()
 end)
 
 --====================================================
--- 唯一 ScreenGui（手机最稳）
+-- ScreenGui
 --====================================================
 local gui = Instance.new("ScreenGui")
 gui.Name = "StableGui"
@@ -91,13 +91,16 @@ do
 end
 
 --====================================================
--- 关闭按钮（清数据）
+-- 关闭按钮（关闭即清除全部数据）
 --====================================================
 local close = Instance.new("TextButton", top)
 close.Size = UDim2.new(0,28,0,22)
 close.Position = UDim2.new(1,-32,0,4)
 close.Text = "X"
 close.BackgroundColor3 = Color3.fromRGB(150,60,60)
+close.MouseButton1Click:Connect(function()
+	gui:Destroy()
+end)
 
 --====================================================
 -- 状态
@@ -126,38 +129,14 @@ toggle(40,"自动拾取箱子：","box")
 toggle(70,"自动拾取果实：","fruit")
 
 --====================================================
--- TP 面板按钮
+-- TP 面板
 --====================================================
 local openTP = Instance.new("TextButton", frame)
 openTP.Size = UDim2.new(1,-10,0,28)
 openTP.Position = UDim2.new(0,5,0,105)
 openTP.Text = "坐标传送面板"
 openTP.BackgroundColor3 = Color3.fromRGB(70,130,180)
---====================================================
--- 果实生成记录（GUI）
---====================================================
-local logTitle = Instance.new("TextLabel", frame)
-logTitle.Size = UDim2.new(1,-10,0,22)
-logTitle.Position = UDim2.new(0,5,0,180)
-logTitle.Text = "果实生成记录"
-logTitle.TextColor3 = Color3.fromRGB(255,200,60)
-logTitle.BackgroundTransparency = 1
-logTitle.TextXAlignment = Left
 
-local logList = Instance.new("ScrollingFrame", frame)
-logList.Position = UDim2.new(0,5,0,205)
-logList.Size = UDim2.new(1,-10,0,130)
-logList.CanvasSize = UDim2.new(0,0,0,0)
-logList.ScrollBarThickness = 6
-logList.BackgroundColor3 = Color3.fromRGB(28,28,28)
-logList.BorderSizePixel = 0
-
-local logLayout = Instance.new("UIListLayout", logList)
-logLayout.Padding = UDim.new(0,4)
-
---====================================================
--- TP 子窗口（Frame）
---====================================================
 local tp = Instance.new("Frame", frame)
 tp.Size = UDim2.new(1,-10,0,180)
 tp.Position = UDim2.new(0,5,0,140)
@@ -169,15 +148,12 @@ save.Size = UDim2.new(1,0,0,28)
 save.Text = "保存当前位置"
 save.BackgroundColor3 = Color3.fromRGB(80,140,200)
 
-local layout = Instance.new("UIListLayout", tp)
-layout.Padding = UDim.new(0,4)
+local tpLayout = Instance.new("UIListLayout", tp)
+tpLayout.Padding = UDim.new(0,4)
 
 openTP.MouseButton1Click:Connect(function()
 	tp.Visible = not tp.Visible
-	logTitle.Visible = not tp.Visible
-	logList.Visible = not tp.Visible
 end)
-
 
 save.MouseButton1Click:Connect(function()
 	saveId += 1
@@ -191,12 +167,30 @@ save.MouseButton1Click:Connect(function()
 	end)
 end)
 
-close.MouseButton1Click:Connect(function()
-	gui:Destroy()
-end)
+--====================================================
+-- 果实记录 GUI
+--====================================================
+local logTitle = Instance.new("TextLabel", frame)
+logTitle.Size = UDim2.new(1,-10,0,22)
+logTitle.Position = UDim2.new(0,5,0,325)
+logTitle.Text = "果实生成记录"
+logTitle.TextColor3 = Color3.fromRGB(255,200,60)
+logTitle.BackgroundTransparency = 1
+logTitle.TextXAlignment = Left
+
+local logList = Instance.new("ScrollingFrame", frame)
+logList.Position = UDim2.new(0,5,0,350)
+logList.Size = UDim2.new(1,-10,0,0)
+logList.CanvasSize = UDim2.new(0,0,0,0)
+logList.ScrollBarThickness = 6
+logList.BackgroundColor3 = Color3.fromRGB(28,28,28)
+logList.BorderSizePixel = 0
+
+local logLayout = Instance.new("UIListLayout", logList)
+logLayout.Padding = UDim.new(0,4)
 
 --====================================================
--- 自动拾取（长按 Prompt 修复版）
+-- 自动拾取配置
 --====================================================
 local FRUIT = {
 	["Hie Hie Devil Fruit"]=true,
@@ -207,13 +201,33 @@ local FRUIT = {
 }
 local BOX = {Box=true,Chest=true,Barrel=true}
 
-local busy = false
 local MAX_DIST = 3000
 local SCAN = 0.4
+local busy = false
+
 --====================================================
--- ProximityPrompt 缓存
+-- Prompt 缓存（稳定版）【修复点】
 --====================================================
 local PromptCache = {}
+
+local function addPrompt(pp)
+	if pp:IsA("ProximityPrompt") then
+		PromptCache[pp] = true
+	end
+end
+
+local function removePrompt(pp)
+	PromptCache[pp] = nil
+end
+
+for _,obj in ipairs(workspace:GetDescendants()) do
+	if obj:IsA("ProximityPrompt") then
+		addPrompt(obj)
+	end
+end
+
+workspace.DescendantAdded:Connect(addPrompt)
+workspace.DescendantRemoving:Connect(removePrompt)
 
 local function getType(pp)
 	local c = pp.Parent
@@ -223,53 +237,10 @@ local function getType(pp)
 		c = c.Parent
 	end
 end
+
 --====================================================
--- 果实记录工具函数
+-- 自动拾取循环（缓存 + 防锁死）【核心修复】
 --====================================================
-local function nowTime()
-	local t = os.date("*t")
-	return string.format("%02d:%02d:%02d", t.hour, t.min, t.sec)
-end
-
-local function addFruitLog(name)
-	local time = nowTime()
-	table.insert(FruitLog, {name=name, time=time})
-
-	local l = Instance.new("TextLabel", logList)
-	l.Size = UDim2.new(1,-4,0,20)
-	l.BackgroundTransparency = 1
-	l.TextXAlignment = Left
-	l.Font = Enum.Font.SourceSansBold
-	l.TextSize = 13
-	l.TextColor3 = Color3.fromRGB(255,200,60)
-	l.Text = string.format("%s  [%s]", name, time)
-
-	task.wait()
-	logList.CanvasSize = UDim2.new(0,0,0,logLayout.AbsoluteContentSize.Y)
-end
---====================================================
--- Prompt 缓存维护
---====================================================
-local function addPrompt(pp)
-	if not pp:IsA("ProximityPrompt") then return end
-	PromptCache[pp] = true
-end
-
-local function removePrompt(pp)
-	PromptCache[pp] = nil
-end
-
--- 初始化已有 Prompt
-for _,obj in ipairs(workspace:GetDescendants()) do
-	if obj:IsA("ProximityPrompt") then
-		addPrompt(obj)
-	end
-end
-
--- 动态更新
-workspace.DescendantAdded:Connect(addPrompt)
-workspace.DescendantRemoving:Connect(removePrompt)
-
 task.spawn(function()
 	while true do
 		task.wait(busy and 0.1 or SCAN)
@@ -279,58 +250,44 @@ task.spawn(function()
 		local best, dist = nil, math.huge
 
 		for pp,_ in pairs(PromptCache) do
-			if pp:IsA("ProximityPrompt") and pp.Enabled then
-				if pp.HoldDuration > 0 then
-					pp.HoldDuration = 0
-				end
+			if not pp.Parent then
+				PromptCache[pp] = nil
+				continue
+			end
+			if not pp.Enabled then continue end
 
-				local kind, model = getType(pp)
-				if not kind then continue end
+			local kind = getType(pp)
+			if not kind then continue end
+			if kind == "fruit" and not State.fruit then continue end
+			if kind == "box" and not State.box then continue end
 
-				if kind == "fruit" and not State.fruit then continue end
-				if kind == "box" and not State.box then continue end
-
-
-				local part = pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
-				if part:IsA("BasePart") then
-					local d = (hrp.Position - part.Position).Magnitude
-					if d < dist and d <= MAX_DIST then
-						best = pp
-						dist = d
-					end
+			local part = pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
+			if part:IsA("BasePart") then
+				local d = (hrp.Position - part.Position).Magnitude
+				if d < dist and d <= MAX_DIST then
+					best = pp
+					dist = d
 				end
 			end
 		end
 
 		if best then
 			busy = true
-			local part = best.Parent:IsA("Attachment") and best.Parent.Parent or best.Parent
-			HRP().CFrame = part.CFrame * CFrame.new(0,0,2)
-			task.wait(0.15)
-			if fireproximityprompt then
-				fireproximityprompt(best, 0)
-			end
+			task.delay(1, function() busy = false end)
+
+			pcall(function()
+				local part = best.Parent:IsA("Attachment") and best.Parent.Parent or best.Parent
+				HRP().CFrame = part.CFrame * CFrame.new(0,0,2)
+				task.wait(0.15)
+				if fireproximityprompt then
+					fireproximityprompt(best, 0)
+				end
+			end)
+
 			task.wait(0.3)
 			busy = false
 		end
 	end
 end)
---====================================================
--- 果实生成监听（始终开启）
---====================================================
-workspace.DescendantAdded:Connect(function(obj)
-	if not obj:IsA("ProximityPrompt") then return end
 
-	task.wait(0.1) -- 等模型完整
-
-	local c = obj.Parent
-	while c do
-		if FRUIT and FRUIT[c.Name] then
-			addFruitLog(c.Name)
-			break
-		end
-		c = c.Parent
-	end
-end)
-
-warn("✅ 手机稳定 · 最终整合版 已加载")
+warn("✅ 手机 · 缓存稳定 · 最终整合版 已加载")
