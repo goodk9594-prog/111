@@ -104,6 +104,7 @@ close.BackgroundColor3 = Color3.fromRGB(150,60,60)
 --====================================================
 local State = {box=false, fruit=false}
 local saveId = 0
+local FruitLog = {}
 
 --====================================================
 -- Toggle
@@ -132,6 +133,27 @@ openTP.Size = UDim2.new(1,-10,0,28)
 openTP.Position = UDim2.new(0,5,0,105)
 openTP.Text = "坐标传送面板"
 openTP.BackgroundColor3 = Color3.fromRGB(70,130,180)
+--====================================================
+-- 果实生成记录（GUI）
+--====================================================
+local logTitle = Instance.new("TextLabel", frame)
+logTitle.Size = UDim2.new(1,-10,0,22)
+logTitle.Position = UDim2.new(0,5,0,180)
+logTitle.Text = "果实生成记录"
+logTitle.TextColor3 = Color3.fromRGB(255,200,60)
+logTitle.BackgroundTransparency = 1
+logTitle.TextXAlignment = Left
+
+local logList = Instance.new("ScrollingFrame", frame)
+logList.Position = UDim2.new(0,5,0,205)
+logList.Size = UDim2.new(1,-10,0,130)
+logList.CanvasSize = UDim2.new(0,0,0,0)
+logList.ScrollBarThickness = 6
+logList.BackgroundColor3 = Color3.fromRGB(28,28,28)
+logList.BorderSizePixel = 0
+
+local logLayout = Instance.new("UIListLayout", logList)
+logLayout.Padding = UDim.new(0,4)
 
 --====================================================
 -- TP 子窗口（Frame）
@@ -194,6 +216,30 @@ local function getType(pp)
 		c = c.Parent
 	end
 end
+--====================================================
+-- 果实记录工具函数
+--====================================================
+local function nowTime()
+	local t = os.date("*t")
+	return string.format("%02d:%02d:%02d", t.hour, t.min, t.sec)
+end
+
+local function addFruitLog(name)
+	local time = nowTime()
+	table.insert(FruitLog, {name=name, time=time})
+
+	local l = Instance.new("TextLabel", logList)
+	l.Size = UDim2.new(1,-4,0,20)
+	l.BackgroundTransparency = 1
+	l.TextXAlignment = Left
+	l.Font = Enum.Font.SourceSansBold
+	l.TextSize = 13
+	l.TextColor3 = Color3.fromRGB(255,200,60)
+	l.Text = string.format("%s  [%s]", name, time)
+
+	task.wait()
+	logList.CanvasSize = UDim2.new(0,0,0,logLayout.AbsoluteContentSize.Y)
+end
 
 task.spawn(function()
 	while true do
@@ -236,6 +282,23 @@ task.spawn(function()
 			task.wait(0.3)
 			busy = false
 		end
+	end
+end)
+--====================================================
+-- 果实生成监听（始终开启）
+--====================================================
+workspace.DescendantAdded:Connect(function(obj)
+	if not obj:IsA("ProximityPrompt") then return end
+
+	task.wait(0.1) -- 等模型完整
+
+	local c = obj.Parent
+	while c do
+		if FRUIT and FRUIT[c.Name] then
+			addFruitLog(c.Name)
+			break
+		end
+		c = c.Parent
 	end
 end)
 
