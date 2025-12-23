@@ -1,21 +1,16 @@
 --====================================================
--- 等待环境稳定（非常关键）
+-- Services & Player
 --====================================================
-repeat task.wait() until game:IsLoaded()
-
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
-local VirtualUser = game:GetService("VirtualUser")
 local PPS = game:GetService("ProximityPromptService")
+local VirtualUser = game:GetService("VirtualUser")
 
 local P = Players.LocalPlayer
-local PlayerGui = P:WaitForChild("PlayerGui", 10)
-if not PlayerGui then return end
-
-task.wait(0.5) -- 再等一帧，防止 GUI 被吞
+local PlayerGui = P:WaitForChild("PlayerGui")
 
 --====================================================
--- Anti AFK
+-- Anti AFK（最原始稳定写法）
 --====================================================
 P.Idled:Connect(function()
 	VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
@@ -39,58 +34,143 @@ local function HRP()
 	return (P.Character or P.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
 end
 
-local function drag(handle, target)
-	local dragging, startPos, startGui
-	handle.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+--====================================================
+-- 清理旧 GUI（简单粗暴）
+--====================================================
+pcall(function()
+	PlayerGui:FindFirstChild("StableGui"):Destroy()
+end)
+
+--====================================================
+-- 唯一 ScreenGui（关键）
+--====================================================
+local gui = Instance.new("ScreenGui")
+gui.Name = "StableGui"
+gui.ResetOnSpawn = false
+gui.Parent = PlayerGui
+
+--====================================================
+-- 主窗口
+--====================================================
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0,260,0,360)
+frame.Position = UDim2.new(0,30,0,120)
+frame.BackgroundColor3 = Color3.fromRGB(35,35,35)
+
+local top = Instance.new("Frame", frame)
+top.Size = UDim2.new(1,0,0,30)
+top.BackgroundColor3 = Color3.fromRGB(25,25,25)
+
+--====================================================
+-- 拖动（直接写，不封装）
+--====================================================
+do
+	local dragging, sp, fp
+	top.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
 			dragging = true
-			startPos = i.Position
-			startGui = target.Position
+			sp = i.Position
+			fp = frame.Position
 		end
 	end)
-	handle.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+	top.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
 			dragging = false
 		end
 	end)
 	UIS.InputChanged:Connect(function(i)
-		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-			local d = i.Position - startPos
-			target.Position = UDim2.new(
-				startGui.X.Scale, startGui.X.Offset + d.X,
-				startGui.Y.Scale, startGui.Y.Offset + d.Y
-			)
+		if dragging and (i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseMovement) then
+			local d = i.Position - sp
+			frame.Position = UDim2.new(fp.X.Scale, fp.X.Offset + d.X, fp.Y.Scale, fp.Y.Offset + d.Y)
 		end
 	end)
 end
 
 --====================================================
--- 清理旧 GUI
+-- 关闭按钮（关闭即清数据）
 --====================================================
-for _,g in ipairs(PlayerGui:GetChildren()) do
-	if g.Name == "MainGui" or g.Name == "TPGui" then
-		g:Destroy()
-	end
+local close = Instance.new("TextButton", top)
+close.Size = UDim2.new(0,28,0,22)
+close.Position = UDim2.new(1,-32,0,4)
+close.Text = "X"
+close.BackgroundColor3 = Color3.fromRGB(150,60,60)
+
+--====================================================
+-- 状态
+--====================================================
+local State = {box=false, fruit=false}
+local Saved = {}
+local saveId = 0
+
+--====================================================
+-- Toggle Buttons
+--====================================================
+local function toggle(y,text,key)
+	local b = Instance.new("TextButton", frame)
+	b.Size = UDim2.new(1,-10,0,26)
+	b.Position = UDim2.new(0,5,0,y)
+	b.BackgroundColor3 = Color3.fromRGB(60,60,60)
+	b.TextColor3 = Color3.new(1,1,1)
+	b.Text = text.."关"
+	b.MouseButton1Click:Connect(function()
+		State[key] = not State[key]
+		b.Text = text .. (State[key] and "开" or "关")
+	end)
 end
 
---====================================================
--- ScreenGui 创建函数（强制显示核心）
---====================================================
-local function newGui(name)
-	local g = Instance.new("ScreenGui")
-	g.Name = name
-	g.ResetOnSpawn = false
-	g.Enabled = true
-	g.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	g.Parent = PlayerGui
-	return g
-end
+toggle(40,"自动拾取箱子：","box")
+toggle(70,"自动拾取果实：","fruit")
 
 --====================================================
--- 自动拾取配置（原始）
+-- TP 面板按钮
 --====================================================
-local MAX_DIST, FAIL_CD, SCAN = 3000, 6, 0.4
+local openTP = Instance.new("TextButton", frame)
+openTP.Size = UDim2.new(1,-10,0,28)
+openTP.Position = UDim2.new(0,5,0,105)
+openTP.Text = "坐标传送面板"
+openTP.BackgroundColor3 = Color3.fromRGB(70,130,180)
 
+--====================================================
+-- TP 子窗口（Frame，不是 ScreenGui）
+--====================================================
+local tp = Instance.new("Frame", frame)
+tp.Size = UDim2.new(1,-10,0,180)
+tp.Position = UDim2.new(0,5,0,140)
+tp.BackgroundColor3 = Color3.fromRGB(30,30,30)
+tp.Visible = false
+
+local save = Instance.new("TextButton", tp)
+save.Size = UDim2.new(1,0,0,28)
+save.Text = "保存当前位置"
+save.BackgroundColor3 = Color3.fromRGB(80,140,200)
+
+local list = Instance.new("UIListLayout", tp)
+list.Padding = UDim.new(0,4)
+
+openTP.MouseButton1Click:Connect(function()
+	tp.Visible = not tp.Visible
+end)
+
+save.MouseButton1Click:Connect(function()
+	saveId += 1
+	local cf = HRP().CFrame
+	local btn = Instance.new("TextButton", tp)
+	btn.Size = UDim2.new(1,0,0,26)
+	btn.Text = "坐标 "..saveId
+	btn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+	btn.MouseButton1Click:Connect(function()
+		HRP().CFrame = cf
+	end)
+end)
+
+close.MouseButton1Click:Connect(function()
+	gui:Destroy()
+	Saved = {}
+end)
+
+--====================================================
+-- 自动拾取 & 果实检测（逻辑不依赖 GUI）
+--====================================================
 local FRUIT = {
 	["Hie Hie Devil Fruit"]=true,
 	["Bomu Bomu Devil Fruit"]=true,
@@ -100,143 +180,21 @@ local FRUIT = {
 }
 local BOX = {Box=true,Chest=true,Barrel=true}
 
-local S = {boxPick=false, fruitPick=false}
-local busy, bad = false, {}
-
---====================================================
--- 主 GUI
---====================================================
-local mainGui = newGui("MainGui")
-
-local main = Instance.new("Frame")
-main.Size = UDim2.new(0,240,0,340)
-main.Position = UDim2.new(0,20,0,120)
-main.BackgroundColor3 = Color3.fromRGB(35,35,35)
-main.BorderSizePixel = 0
-main.Parent = mainGui
-
-local top = Instance.new("Frame", main)
-top.Size = UDim2.new(1,0,0,28)
-top.BackgroundColor3 = Color3.fromRGB(25,25,25)
-drag(top, main)
-
-local closeMain = Instance.new("TextButton", top)
-closeMain.Size = UDim2.new(0,24,0,22)
-closeMain.Position = UDim2.new(1,-28,0,3)
-closeMain.Text = "X"
-closeMain.BackgroundColor3 = Color3.fromRGB(140,60,60)
-
---====================================================
--- Toggle
---====================================================
-local function toggle(y,text,key)
-	local b=Instance.new("TextButton",main)
-	b.Size=UDim2.new(1,-10,0,26)
-	b.Position=UDim2.new(0,5,0,y)
-	b.BackgroundColor3=Color3.fromRGB(60,60,60)
-	b.TextColor3=Color3.new(1,1,1)
-	b.Text=text.."关"
-	b.BorderSizePixel=0
-	b.MouseButton1Click:Connect(function()
-		S[key]=not S[key]
-		b.Text=text..(S[key] and "开" or "关")
-	end)
-end
-
-toggle(40,"自动拾取箱子：","boxPick")
-toggle(70,"拾取果实：","fruitPick")
-
---====================================================
--- 果实记录框
---====================================================
-local list = Instance.new("ScrollingFrame", main)
-list.Position = UDim2.new(0,5,0,140)
-list.Size = UDim2.new(1,-10,1,-145)
-list.ScrollBarThickness = 6
-list.BackgroundColor3 = Color3.fromRGB(28,28,28)
-list.BorderSizePixel = 0
-
-local layout = Instance.new("UIListLayout", list)
-layout.Padding = UDim.new(0,4)
-
-local function nowTime()
-	local t = os.date("*t")
-	return string.format("%02d:%02d:%02d", t.hour, t.min, t.sec)
-end
-
-local function addFruitLog(name)
-	local l = Instance.new("TextLabel", list)
-	l.Size = UDim2.new(1,-4,0,20)
-	l.BackgroundTransparency = 1
-	l.TextXAlignment = Left
-	l.Font = Enum.Font.SourceSansBold
-	l.TextSize = 13
-	l.TextColor3 = Color3.fromRGB(255,200,60)
-	l.Text = string.format("%s [%s]", name, nowTime())
-	task.wait()
-	list.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y)
-end
-
---====================================================
--- TP 子 GUI（最小化 / 关闭 / 保存）
---====================================================
-local tpGui = newGui("TPGui")
-tpGui.Enabled = false
-
-local tpFrame = Instance.new("Frame", tpGui)
-tpFrame.Size = UDim2.new(0,260,0,300)
-tpFrame.Position = UDim2.new(0.5,-130,0.5,-150)
-tpFrame.BackgroundColor3 = Color3.fromRGB(35,35,35)
-
-local tpTop = Instance.new("Frame", tpFrame)
-tpTop.Size = UDim2.new(1,0,0,30)
-tpTop.BackgroundColor3 = Color3.fromRGB(25,25,25)
-drag(tpTop, tpFrame)
-
-local tpMin = Instance.new("TextButton", tpTop)
-tpMin.Size = UDim2.new(0,30,0,22)
-tpMin.Position = UDim2.new(1,-64,0,4)
-tpMin.Text = "-"
-
-local tpClose = Instance.new("TextButton", tpTop)
-tpClose.Size = UDim2.new(0,30,0,22)
-tpClose.Position = UDim2.new(1,-34,0,4)
-tpClose.Text = "X"
-
-local openTP = Instance.new("TextButton", main)
-openTP.Size = UDim2.new(1,-10,0,28)
-openTP.Position = UDim2.new(0,5,0,105)
-openTP.Text = "坐标传送面板"
-openTP.BackgroundColor3 = Color3.fromRGB(70,130,180)
-
-openTP.MouseButton1Click:Connect(function()
-	tpGui.Enabled = true
-	tpFrame.Visible = true
-end)
-
-tpClose.MouseButton1Click:Connect(function()
-	tpGui.Enabled = false
-end)
-
-tpMin.MouseButton1Click:Connect(function()
-	tpFrame.Visible = false
-end)
-
-closeMain.MouseButton1Click:Connect(function()
-	mainGui:Destroy()
-	tpGui:Destroy()
-end)
-
---====================================================
--- 自动拾取 + 果实检测（原逻辑）
---====================================================
-local function getType(pp)
-	local c=pp.Parent
-	while c do
-		if FRUIT[c.Name] then return "fruit",c end
-		if BOX[c.Name] then return "box",c end
-		c=c.Parent
+workspace.DescendantAdded:Connect(function(o)
+	if o:IsA("ProximityPrompt") then
+		local c = o.Parent
+		while c do
+			if FRUIT[c.Name] and State.fruit then
+				fireproximityprompt(o)
+				break
+			end
+			if BOX[c.Name] and State.box then
+				fireproximityprompt(o)
+				break
+			end
+			c = c.Parent
+		end
 	end
-end
+end)
 
-local funct
+warn("✅ 手机稳定版 GUI 已加载")
