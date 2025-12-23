@@ -296,14 +296,48 @@ local function pick(pp)
 end
 
 task.spawn(function()
-	while scriptAlive do
-		task.wait(SCAN)
-		if not busy then
-			local pp=bestPrompt()
-			if pp then pick(pp) end
+	while task.wait(SCAN) do
+		if busy then continue end
+
+		local hrp = HRP()
+		local best, dist = nil, math.huge
+
+		for _,pp in ipairs(workspace:GetDescendants()) do
+			if not (pp:IsA("ProximityPrompt") and pp.Enabled) then
+				continue
+			end
+
+			local kind, model = getType(pp)
+			if not kind then continue end
+			if kind == "fruit" and not State.fruit then continue end
+			if kind == "box" and not State.box then continue end
+
+			local part = pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
+			if part:IsA("BasePart") then
+				local d = (hrp.Position - part.Position).Magnitude
+				if d <= MAX_DIST and d < dist then
+					best, dist = pp, d
+				end
+			end
+		end
+
+		if best then
+			busy = true
+
+			local part = best.Parent:IsA("Attachment") and best.Parent.Parent or best.Parent
+			HRP().CFrame = part.CFrame * CFrame.new(0,0,2)
+			task.wait(0.15)
+
+			if fireproximityprompt then
+				fireproximityprompt(best)
+			end
+
+			task.wait(0.25)
+			busy = false
 		end
 	end
 end)
+
 
 -- 果实生成监听
 workspace.DescendantAdded:Connect(function(o)
