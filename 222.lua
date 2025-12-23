@@ -232,11 +232,29 @@ workspace.DescendantRemoving:Connect(removePrompt)
 local function getType(pp)
 	local c = pp.Parent
 	while c do
-		if FRUIT[c.Name] then return "fruit", c end
-		if BOX[c.Name] then return "box", c end
+		-- 模型名判断
+		if FRUIT[c.Name] then
+			return "fruit", c
+		end
+		if BOX[c.Name] then
+			return "box", c
+		end
+
+		-- Prompt 行为文本兜底（非常重要）
+		if pp.ActionText then
+			local t = string.lower(pp.ActionText)
+			if t:find("pick") or t:find("collect") or t:find("fruit") then
+				return "fruit", c
+			end
+			if t:find("open") or t:find("search") then
+				return "box", c
+			end
+		end
+
 		c = c.Parent
 	end
 end
+
 
 --====================================================
 -- 自动拾取循环（缓存 + 防锁死）【核心修复】
@@ -261,7 +279,11 @@ task.spawn(function()
 			if kind == "fruit" and not State.fruit then continue end
 			if kind == "box" and not State.box then continue end
 
-			local part = pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
+			local part = pp.Parent:IsA("Attachment") and pp.Parent.Parent
+				or pp.Parent:IsA("BasePart") and pp.Parent
+				or pp:FindFirstAncestorWhichIsA("BasePart")
+			if not part then continue end
+
 			if part:IsA("BasePart") then
 				local d = (hrp.Position - part.Position).Magnitude
 				if d < dist and d <= MAX_DIST then
