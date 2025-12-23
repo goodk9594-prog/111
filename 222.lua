@@ -7,7 +7,7 @@ local UIS = game:GetService("UserInputService")
 local P = Players.LocalPlayer
 
 --====================================================
--- Config（完全保留方案 A）
+-- Config（方案 A）
 --====================================================
 local MAX_DIST, FAIL_CD, SCAN = 3000, 6, 0.4
 
@@ -25,8 +25,6 @@ local BOX = {Box=true,Chest=true,Barrel=true}
 --====================================================
 local S = {boxPick=false, fruitPick=false}
 local busy, bad = false, {}
-local FruitLog = {}
-local SavedPos = {}
 local Running = true
 
 --====================================================
@@ -41,21 +39,18 @@ gui.Name = "AutoPickGui"
 -- 主窗口
 --====================================================
 local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.new(0,220,0,300)
+frame.Size = UDim2.new(0,220,0,320)
 frame.Position = UDim2.new(0,20,0,120)
 frame.BackgroundColor3 = Color3.fromRGB(35,35,35)
 frame.BorderSizePixel = 0
 
 --====================================================
--- 顶栏
+-- 顶栏（拖拽）
 --====================================================
 local top = Instance.new("Frame", frame)
 top.Size = UDim2.new(1,0,0,30)
 top.BackgroundColor3 = Color3.fromRGB(25,25,25)
 
---====================================================
--- 拖动
---====================================================
 do
 	local dragging, sp, fp
 	top.InputBegan:Connect(function(i)
@@ -97,20 +92,41 @@ icon.Visible = false
 icon.BackgroundColor3 = Color3.fromRGB(60,60,60)
 
 mini.MouseButton1Click:Connect(function()
-	frame.Visible=false
-	icon.Visible=true
-	icon.Position=frame.Position
+	frame.Visible = false
+	icon.Visible = true
+	icon.Position = frame.Position
 end)
 
 icon.MouseButton1Click:Connect(function()
-	frame.Visible=true
-	icon.Visible=false
+	frame.Visible = true
+	icon.Visible = false
 end)
 
 close.MouseButton1Click:Connect(function()
-	Running=false
+	Running = false
 	gui:Destroy()
 end)
+
+-- icon 手机拖拽
+do
+	local dragging, sp, fp
+	icon.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			sp = i.Position
+			fp = icon.Position
+		end
+	end)
+	icon.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.Touch then dragging = false end
+	end)
+	UIS.InputChanged:Connect(function(i)
+		if dragging and i.UserInputType == Enum.UserInputType.Touch then
+			local d = i.Position - sp
+			icon.Position = UDim2.new(fp.X.Scale, fp.X.Offset+d.X, fp.Y.Scale, fp.Y.Offset+d.Y)
+		end
+	end)
+end
 
 --====================================================
 -- Toggle
@@ -131,7 +147,7 @@ toggle(40,"自动拾取箱子：","boxPick")
 toggle(70,"自动拾取果实：","fruitPick")
 
 --====================================================
--- 坐标面板（右侧展开）
+-- 坐标传送面板
 --====================================================
 local tpBtn = Instance.new("TextButton", frame)
 tpBtn.Size = UDim2.new(1,-10,0,28)
@@ -140,12 +156,11 @@ tpBtn.Text = "坐标传送面板"
 
 local tp = Instance.new("Frame", gui)
 tp.Size = UDim2.new(0,200,0,240)
-tp.Position = UDim2.new(0,250,0,120)
 tp.BackgroundColor3 = Color3.fromRGB(30,30,30)
 tp.Visible = false
 
-local layout = Instance.new("UIListLayout", tp)
-layout.Padding = UDim.new(0,4)
+local tpList = Instance.new("UIListLayout", tp)
+tpList.Padding = UDim.new(0,4)
 
 local saveBtn = Instance.new("TextButton", tp)
 saveBtn.Size = UDim2.new(1,0,0,28)
@@ -153,9 +168,15 @@ saveBtn.Text = "保存当前位置"
 
 tpBtn.MouseButton1Click:Connect(function()
 	tp.Visible = not tp.Visible
-	tp.Position = UDim2.new(0,frame.AbsolutePosition.X+frame.AbsoluteSize.X+10,0,frame.AbsolutePosition.Y)
+	tp.Position = UDim2.new(
+		0, frame.AbsolutePosition.X + frame.AbsoluteSize.X + 10,
+		0, frame.AbsolutePosition.Y
+	)
 end)
 
+--====================================================
+-- 工具
+--====================================================
 local function HRP()
 	return (P.Character or P.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
 end
@@ -182,7 +203,7 @@ saveBtn.MouseButton1Click:Connect(function()
 end)
 
 --====================================================
--- 果实记录（服务器时间戳）
+-- 果实记录
 --====================================================
 local list = Instance.new("ScrollingFrame", frame)
 list.Position = UDim2.new(0,5,0,150)
@@ -203,7 +224,7 @@ local function addFruit(name)
 end
 
 --====================================================
--- 自动拾取（原封不动方案 A）
+-- 自动拾取（方案 A 原逻辑）
 --====================================================
 local function getType(pp)
 	local c=pp.Parent
@@ -265,4 +286,4 @@ workspace.DescendantAdded:Connect(function(o)
 	end
 end)
 
-warn("✅ 方案A · 终极稳定整合版 已加载")
+warn("✅ 终极稳定整合版 已加载")
