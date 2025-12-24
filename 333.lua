@@ -7,7 +7,7 @@ local UIS = game:GetService("UserInputService")
 local P = Players.LocalPlayer
 
 --====================================================
--- Anti AFK
+-- Anti AFK（PC / Mobile 通用）
 --====================================================
 local VirtualUser = game:GetService("VirtualUser")
 P.Idled:Connect(function()
@@ -39,10 +39,30 @@ local Running = true
 --====================================================
 -- GUI 清理
 --====================================================
-pcall(function() CoreGui.AutoPickGui:Destroy() end)
+pcall(function()
+	if CoreGui:FindFirstChild("AutoPickGui") then
+		CoreGui.AutoPickGui:Destroy()
+	end
+	if P:FindFirstChild("PlayerGui") and P.PlayerGui:FindFirstChild("AutoPickGui") then
+		P.PlayerGui.AutoPickGui:Destroy()
+	end
+end)
 
-local gui = Instance.new("ScreenGui", CoreGui)
+--====================================================
+-- GUI 创建（★ 电脑 / 手机 兼容关键）
+--====================================================
+local gui = Instance.new("ScreenGui")
 gui.Name = "AutoPickGui"
+gui.ResetOnSpawn = false
+
+if gethui then
+	gui.Parent = gethui()
+elseif syn and syn.protect_gui then
+	syn.protect_gui(gui)
+	gui.Parent = CoreGui
+else
+	gui.Parent = P:WaitForChild("PlayerGui")
+end
 
 --====================================================
 -- 主窗口
@@ -52,9 +72,10 @@ frame.Size = UDim2.new(0,220,0,320)
 frame.Position = UDim2.new(0,20,0,120)
 frame.BackgroundColor3 = Color3.fromRGB(35,35,35)
 frame.BorderSizePixel = 0
+frame.Visible = true
 
 --====================================================
--- 顶栏（电脑 + 手机拖拽）
+-- 顶栏（鼠标 / 触摸通用拖拽）
 --====================================================
 local top = Instance.new("Frame", frame)
 top.Size = UDim2.new(1,0,0,30)
@@ -72,15 +93,10 @@ do
 	end)
 
 	UIS.InputChanged:Connect(function(i)
-		if dragging and (
-			i.UserInputType == Enum.UserInputType.MouseMovement
-			or i.UserInputType == Enum.UserInputType.Touch
-		) then
+		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement
+		or i.UserInputType == Enum.UserInputType.Touch) then
 			local d = i.Position - sp
-			frame.Position = UDim2.new(
-				fp.X.Scale, fp.X.Offset + d.X,
-				fp.Y.Scale, fp.Y.Offset + d.Y
-			)
+			frame.Position = UDim2.new(fp.X.Scale, fp.X.Offset + d.X, fp.Y.Scale, fp.Y.Offset + d.Y)
 		end
 	end)
 
@@ -131,41 +147,6 @@ close.MouseButton1Click:Connect(function()
 end)
 
 --====================================================
--- 最小化图标（电脑 + 手机拖拽）
---====================================================
-do
-	local dragging, sp, fp
-	icon.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1
-		or i.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			sp = i.Position
-			fp = icon.Position
-		end
-	end)
-
-	UIS.InputChanged:Connect(function(i)
-		if dragging and (
-			i.UserInputType == Enum.UserInputType.MouseMovement
-			or i.UserInputType == Enum.UserInputType.Touch
-		) then
-			local d = i.Position - sp
-			icon.Position = UDim2.new(
-				fp.X.Scale, fp.X.Offset + d.X,
-				fp.Y.Scale, fp.Y.Offset + d.Y
-			)
-		end
-	end)
-
-	UIS.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1
-		or i.UserInputType == Enum.UserInputType.Touch then
-			dragging = false
-		end
-	end)
-end
-
---====================================================
 -- Toggle
 --====================================================
 local function toggle(y,text,key)
@@ -176,12 +157,68 @@ local function toggle(y,text,key)
 	b.BackgroundColor3 = Color3.fromRGB(60,60,60)
 	b.MouseButton1Click:Connect(function()
 		S[key] = not S[key]
-		b.Text = text..(S[key] and "开" or "关")
+		b.Text = text .. (S[key] and "开" or "关")
 	end)
 end
 
 toggle(40,"自动拾取箱子：","boxPick")
 toggle(70,"自动拾取果实：","fruitPick")
+
+--====================================================
+-- 坐标传送面板
+--====================================================
+local tpBtn = Instance.new("TextButton", frame)
+tpBtn.Size = UDim2.new(1,-10,0,28)
+tpBtn.Position = UDim2.new(0,5,0,110)
+tpBtn.Text = "坐标传送面板"
+
+local tp = Instance.new("Frame", gui)
+tp.Size = UDim2.new(0,200,0,240)
+tp.BackgroundColor3 = Color3.fromRGB(30,30,30)
+tp.Visible = false
+
+local tpList = Instance.new("UIListLayout", tp)
+tpList.Padding = UDim.new(0,4)
+
+local saveBtn = Instance.new("TextButton", tp)
+saveBtn.Size = UDim2.new(1,0,0,28)
+saveBtn.Text = "保存当前位置"
+
+tpBtn.MouseButton1Click:Connect(function()
+	tp.Visible = not tp.Visible
+	tp.Position = UDim2.new(
+		0, frame.AbsolutePosition.X + frame.AbsoluteSize.X + 10,
+		0, frame.AbsolutePosition.Y
+	)
+end)
+
+--====================================================
+-- 工具
+--====================================================
+local function HRP()
+	return (P.Character or P.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
+end
+
+saveBtn.MouseButton1Click:Connect(function()
+	local cf = HRP().CFrame
+	local item = Instance.new("Frame", tp)
+	item.Size = UDim2.new(1,0,0,26)
+
+	local go = Instance.new("TextButton", item)
+	go.Size = UDim2.new(0.7,0,1,0)
+	go.Text = "传送"
+	go.MouseButton1Click:Connect(function()
+		HRP().CFrame = cf
+	end)
+
+	local del = Instance.new("TextButton", item)
+	del.Size = UDim2.new(0.3,0,1,0)
+	del.Position = UDim2.new(0.7,0,0,0)
+	del.Text = "删除"
+	del.MouseButton1Click:Connect(function()
+		item:Destroy()
+	end)
+end)
 
 --====================================================
 -- 果实记录
@@ -195,27 +232,23 @@ local ll = Instance.new("UIListLayout", list)
 ll.Padding = UDim.new(0,4)
 
 local function addFruit(name)
-	local t = os.time()
+	local t = os.date("%H:%M:%S")
 	local l = Instance.new("TextLabel", list)
 	l.Size = UDim2.new(1,-4,0,20)
 	l.BackgroundTransparency = 1
-	l.TextXAlignment = Left
-	l.Text = name.." ["..t.."]"
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.Text = name .. " | " .. t
 	list.CanvasSize = UDim2.new(0,0,0,ll.AbsoluteContentSize.Y)
 end
 
 --====================================================
--- 自动拾取逻辑（未改）
+-- 自动拾取（原逻辑不变）
 --====================================================
-local function HRP()
-	return (P.Character or P.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
-end
-
 local function getType(pp)
 	local c = pp.Parent
 	while c do
-		if FRUIT[c.Name] then return "fruit",c end
-		if BOX[c.Name] then return "box",c end
+		if FRUIT[c.Name] then return "fruit", c end
+		if BOX[c.Name] then return "box", c end
 		c = c.Parent
 	end
 end
@@ -235,7 +268,9 @@ local function bestPrompt()
 		local part = pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
 		if part:IsA("BasePart") then
 			local d = (hrp.Position - part.Position).Magnitude
-			if d <= MAX_DIST and d < dist then best,dist = pp,d end
+			if d <= MAX_DIST and d < dist then
+				best,dist = pp,d
+			end
 		end
 	end
 	return best
@@ -251,9 +286,13 @@ task.spawn(function()
 				local part = pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
 				HRP().CFrame = part.CFrame * CFrame.new(0,0,2)
 				task.wait(0.15)
-				if fireproximityprompt then fireproximityprompt(pp) end
+				if fireproximityprompt then
+					fireproximityprompt(pp)
+				end
 				task.wait(0.25)
-				if pp.Parent then bad[pp] = os.clock() + FAIL_CD end
+				if pp.Parent then
+					bad[pp] = os.clock() + FAIL_CD
+				end
 				busy = false
 			end
 		end
@@ -265,10 +304,10 @@ workspace.DescendantAdded:Connect(function(o)
 	if o:IsA("ProximityPrompt") then
 		task.wait(0.1)
 		local kind,model = getType(o)
-		if kind=="fruit" then
+		if kind=="fruit" and model then
 			addFruit(model.Name)
 		end
 	end
 end)
 
-warn("✅ 电脑 / 手机通用整合版 已加载")
+warn("✅ 终极稳定整合版（电脑可用）已加载")
