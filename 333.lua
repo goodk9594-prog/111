@@ -13,12 +13,15 @@ local UIS = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
 
 --====================================================
--- Anti AFK
+-- Anti AFK（稳定版，不触碰 CoreGui）
 --====================================================
 P.Idled:Connect(function()
-	VirtualUser:CaptureController()
-	VirtualUser:ClickButton2(Vector2.new(0,0))
+    -- 模拟一次极短的跳跃输入
+    game:GetService("UserInputService"):SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+    task.wait(0.1)
+    game:GetService("UserInputService"):SendKeyEvent(false, Enum.KeyCode.Space, false, game)
 end)
+
 
 --====================================================
 -- Config（方案 A）
