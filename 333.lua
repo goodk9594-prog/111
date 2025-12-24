@@ -3,28 +3,19 @@
 --====================================================
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
-local VirtualUser = game:GetService("VirtualUser")
 local Player = Players.LocalPlayer
 
 --====================================================
--- 等待 PlayerGui（稳定）
+-- 等待 PlayerGui
 --====================================================
 local PlayerGui = Player:WaitForChild("PlayerGui", 10)
 if not PlayerGui then
-	warn("❌ PlayerGui 获取失败，脚本终止")
+	warn("❌ PlayerGui 不存在，终止")
 	return
 end
 
 --====================================================
--- Anti AFK（安全版）
---====================================================
-Player.Idled:Connect(function()
-	VirtualUser:CaptureController()
-	VirtualUser:ClickButton2(Vector2.new(0,0))
-end)
-
---====================================================
--- 配置
+-- Config
 --====================================================
 local MAX_DIST, FAIL_CD, SCAN = 3000, 6, 0.4
 
@@ -38,25 +29,21 @@ local FRUIT = {
 local BOX = {Box=true,Chest=true,Barrel=true}
 
 local State = {box=false, fruit=false}
-local Running = true
-local busy = false
+local Running, busy = true, false
 local bad = {}
 
 --====================================================
--- GUI 创建（绝不碰 CoreGui）
+-- GUI（PlayerGui 稳定）
 --====================================================
 pcall(function()
-	PlayerGui:FindFirstChild("AutoPick_PlayerGui"):Destroy()
+	PlayerGui:FindFirstChild("AutoPick_PC"):Destroy()
 end)
 
 local gui = Instance.new("ScreenGui")
-gui.Name = "AutoPick_PlayerGui"
+gui.Name = "AutoPick_PC"
 gui.ResetOnSpawn = false
 gui.Parent = PlayerGui
 
---====================================================
--- 主窗口
---====================================================
 local frame = Instance.new("Frame", gui)
 frame.Size = UDim2.fromOffset(220, 300)
 frame.Position = UDim2.fromOffset(30, 120)
@@ -65,43 +52,35 @@ frame.BorderSizePixel = 0
 frame.Active = true
 frame.Draggable = true
 
---====================================================
--- 标题
---====================================================
 local title = Instance.new("TextLabel", frame)
 title.Size = UDim2.new(1,0,0,30)
 title.BackgroundColor3 = Color3.fromRGB(25,25,25)
-title.Text = "Auto Pick (Stable)"
+title.Text = "Auto Pick (PC Stable)"
 title.TextColor3 = Color3.new(1,1,1)
 title.BorderSizePixel = 0
 
---====================================================
--- 按钮工具
---====================================================
-local function makeToggle(y, text, key)
+local function toggle(y, text, key)
 	local b = Instance.new("TextButton", frame)
 	b.Size = UDim2.new(1,-10,0,26)
 	b.Position = UDim2.new(0,5,0,y)
 	b.Text = text.."关"
 	b.BackgroundColor3 = Color3.fromRGB(60,60,60)
 	b.TextColor3 = Color3.new(1,1,1)
-
 	b.MouseButton1Click:Connect(function()
 		State[key] = not State[key]
 		b.Text = text .. (State[key] and "开" or "关")
 	end)
 end
 
-makeToggle(40,"自动拾取箱子：","box")
-makeToggle(70,"自动拾取果实：","fruit")
+toggle(40,"自动拾取箱子：","box")
+toggle(70,"自动拾取果实：","fruit")
 
 --====================================================
--- 果实记录框（修复 Label 问题）
+-- 果实记录
 --====================================================
 local list = Instance.new("ScrollingFrame", frame)
 list.Position = UDim2.new(0,5,0,110)
 list.Size = UDim2.new(1,-10,1,-115)
-list.CanvasSize = UDim2.new()
 list.ScrollBarThickness = 6
 list.BackgroundTransparency = 1
 
@@ -113,17 +92,16 @@ layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 end)
 
 local function addFruit(name)
-	local t = os.date("%H:%M:%S")
 	local l = Instance.new("TextLabel", list)
 	l.Size = UDim2.new(1,-4,0,22)
 	l.BackgroundTransparency = 1
 	l.TextXAlignment = Enum.TextXAlignment.Left
 	l.TextColor3 = Color3.new(1,1,1)
-	l.Text = name .. " | " .. t
+	l.Text = name .. " | " .. os.date("%H:%M:%S")
 end
 
 --====================================================
--- 工具函数
+-- 工具
 --====================================================
 local function HRP()
 	return Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
@@ -139,7 +117,7 @@ local function getType(pp)
 end
 
 --====================================================
--- 自动拾取主循环（稳定）
+-- 自动拾取
 --====================================================
 task.spawn(function()
 	while Running do
@@ -150,7 +128,6 @@ task.spawn(function()
 		if not hrp then continue end
 
 		for _,pp in ipairs(workspace:GetDescendants()) do
-			if not Running then break end
 			if not pp:IsA("ProximityPrompt") or not pp.Enabled then continue end
 
 			local kind, model = getType(pp)
@@ -172,16 +149,14 @@ task.spawn(function()
 	end
 end)
 
---====================================================
--- 果实生成监听（修复空 Label）
---====================================================
 workspace.DescendantAdded:Connect(function(o)
-	if not o:IsA("ProximityPrompt") then return end
-	task.wait(0.1)
-	local kind, model = getType(o)
-	if kind == "fruit" and model then
-		addFruit(model.Name)
+	if o:IsA("ProximityPrompt") then
+		task.wait(0.1)
+		local kind, model = getType(o)
+		if kind == "fruit" and model then
+			addFruit(model.Name)
+		end
 	end
 end)
 
-warn("✅ PlayerGui 稳定整合版 已成功加载")
+warn("✅ PC 注入器稳定版 已加载（无 Anti-AFK）")
