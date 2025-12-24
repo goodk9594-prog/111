@@ -2,170 +2,133 @@
 -- Services
 --====================================================
 local Players = game:GetService("Players")
-local player = Players.LocalPlayer
+local UIS = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
+local Player = Players.LocalPlayer
 
 --====================================================
--- Config
+-- 等待 PlayerGui（稳定）
 --====================================================
-local SCAN_INTERVAL = 0.4
-local MAX_DIST = 3000
+local PlayerGui = Player:WaitForChild("PlayerGui", 10)
+if not PlayerGui then
+	warn("❌ PlayerGui 获取失败，脚本终止")
+	return
+end
+
+--====================================================
+-- Anti AFK（安全版）
+--====================================================
+Player.Idled:Connect(function()
+	VirtualUser:CaptureController()
+	VirtualUser:ClickButton2(Vector2.new(0,0))
+end)
+
+--====================================================
+-- 配置
+--====================================================
+local MAX_DIST, FAIL_CD, SCAN = 3000, 6, 0.4
 
 local FRUIT = {
-	["Hie Hie Devil Fruit"] = true,
-	["Bomu Bomu Devil Fruit"] = true,
-	["Mochi Mochi Devil Fruit"] = true,
-	["Nikyu Nikyu Devil Fruit"] = true,
-	["Bari Bari Devil Fruit"] = true,
+	["Hie Hie Devil Fruit"]=true,
+	["Bomu Bomu Devil Fruit"]=true,
+	["Mochi Mochi Devil Fruit"]=true,
+	["Nikyu Nikyu Devil Fruit"]=true,
+	["Bari Bari Devil Fruit"]=true,
 }
+local BOX = {Box=true,Chest=true,Barrel=true}
 
-local BOX = {
-	Box = true,
-	Chest = true,
-	Barrel = true,
-}
-
---====================================================
--- State
---====================================================
+local State = {box=false, fruit=false}
 local Running = true
-local AutoBox = false
-local AutoFruit = false
-local Busy = false
+local busy = false
+local bad = {}
 
 --====================================================
--- Character
+-- GUI 创建（绝不碰 CoreGui）
 --====================================================
-local function HRP()
-	return (player.Character or player.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
-end
+pcall(function()
+	PlayerGui:FindFirstChild("AutoPick_PlayerGui"):Destroy()
+end)
 
---====================================================
--- GUI (PlayerGui)
---====================================================
 local gui = Instance.new("ScreenGui")
-gui.Name = "AutoPickStable"
+gui.Name = "AutoPick_PlayerGui"
 gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
+gui.Parent = PlayerGui
 
-local main = Instance.new("Frame", gui)
-main.Size = UDim2.new(0,240,0,340)
-main.Position = UDim2.new(0,40,0,120)
-main.BackgroundColor3 = Color3.fromRGB(35,35,35)
-main.BorderSizePixel = 0
+--====================================================
+-- 主窗口
+--====================================================
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.fromOffset(220, 300)
+frame.Position = UDim2.fromOffset(30, 120)
+frame.BackgroundColor3 = Color3.fromRGB(35,35,35)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
 
--- Title
-local title = Instance.new("TextLabel", main)
+--====================================================
+-- 标题
+--====================================================
+local title = Instance.new("TextLabel", frame)
 title.Size = UDim2.new(1,0,0,30)
-title.Text = "Auto Pick Stable"
-title.TextColor3 = Color3.new(1,1,1)
 title.BackgroundColor3 = Color3.fromRGB(25,25,25)
-
--- Close
-local close = Instance.new("TextButton", title)
-close.Size = UDim2.new(0,30,1,0)
-close.Position = UDim2.new(1,-30,0,0)
-close.Text = "X"
-
-close.MouseButton1Click:Connect(function()
-	Running = false
-	gui:Destroy()
-end)
+title.Text = "Auto Pick (Stable)"
+title.TextColor3 = Color3.new(1,1,1)
+title.BorderSizePixel = 0
 
 --====================================================
--- Toggle Buttons
+-- 按钮工具
 --====================================================
-local function makeToggle(y, text, callback)
-	local b = Instance.new("TextButton", main)
-	b.Size = UDim2.new(1,-20,0,28)
-	b.Position = UDim2.new(0,10,0,y)
+local function makeToggle(y, text, key)
+	local b = Instance.new("TextButton", frame)
+	b.Size = UDim2.new(1,-10,0,26)
+	b.Position = UDim2.new(0,5,0,y)
+	b.Text = text.."关"
 	b.BackgroundColor3 = Color3.fromRGB(60,60,60)
-	b.Text = text .. "：关"
+	b.TextColor3 = Color3.new(1,1,1)
 
-	local on = false
 	b.MouseButton1Click:Connect(function()
-		on = not on
-		b.Text = text .. (on and "：开" or "：关")
-		callback(on)
+		State[key] = not State[key]
+		b.Text = text .. (State[key] and "开" or "关")
 	end)
 end
 
-makeToggle(40, "自动拾取箱子", function(v) AutoBox = v end)
-makeToggle(75, "自动拾取果实", function(v) AutoFruit = v end)
+makeToggle(40,"自动拾取箱子：","box")
+makeToggle(70,"自动拾取果实：","fruit")
 
 --====================================================
--- 坐标传送面板
+-- 果实记录框（修复 Label 问题）
 --====================================================
-local tpBtn = Instance.new("TextButton", main)
-tpBtn.Size = UDim2.new(1,-20,0,28)
-tpBtn.Position = UDim2.new(0,10,0,115)
-tpBtn.Text = "坐标传送面板"
+local list = Instance.new("ScrollingFrame", frame)
+list.Position = UDim2.new(0,5,0,110)
+list.Size = UDim2.new(1,-10,1,-115)
+list.CanvasSize = UDim2.new()
+list.ScrollBarThickness = 6
+list.BackgroundTransparency = 1
 
-local tp = Instance.new("Frame", gui)
-tp.Size = UDim2.new(0,200,0,260)
-tp.BackgroundColor3 = Color3.fromRGB(30,30,30)
-tp.Visible = false
+local layout = Instance.new("UIListLayout", list)
+layout.Padding = UDim.new(0,4)
 
-local tpList = Instance.new("UIListLayout", tp)
-tpList.Padding = UDim.new(0,4)
-
-local save = Instance.new("TextButton", tp)
-save.Size = UDim2.new(1,0,0,28)
-save.Text = "保存当前位置"
-
-tpBtn.MouseButton1Click:Connect(function()
-	tp.Visible = not tp.Visible
-	tp.Position = UDim2.new(
-		0, main.AbsolutePosition.X + main.AbsoluteSize.X + 10,
-		0, main.AbsolutePosition.Y
-	)
+layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	list.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 4)
 end)
-
-save.MouseButton1Click:Connect(function()
-	local cf = HRP().CFrame
-
-	local row = Instance.new("Frame", tp)
-	row.Size = UDim2.new(1,0,0,26)
-
-	local go = Instance.new("TextButton", row)
-	go.Size = UDim2.new(0.7,0,1,0)
-	go.Text = "传送"
-	go.MouseButton1Click:Connect(function()
-		HRP().CFrame = cf
-	end)
-
-	local del = Instance.new("TextButton", row)
-	del.Size = UDim2.new(0.3,0,1,0)
-	del.Position = UDim2.new(0.7,0,0,0)
-	del.Text = "删除"
-	del.MouseButton1Click:Connect(function()
-		row:Destroy()
-	end)
-end)
-
---====================================================
--- 果实生成记录
---====================================================
-local record = Instance.new("ScrollingFrame", main)
-record.Position = UDim2.new(0,10,0,155)
-record.Size = UDim2.new(1,-20,1,-165)
-record.ScrollBarThickness = 6
-
-local rl = Instance.new("UIListLayout", record)
-rl.Padding = UDim.new(0,4)
 
 local function addFruit(name)
-	local label = Instance.new("TextLabel", record)
-	label.Size = UDim2.new(1,-4,0,20)
-	label.BackgroundTransparency = 1
-	label.TextXAlignment = Enum.TextXAlignment.Left
-	label.Text = name .. " | " .. os.time()
-
-	record.CanvasSize = UDim2.new(0,0,0,rl.AbsoluteContentSize.Y)
+	local t = os.date("%H:%M:%S")
+	local l = Instance.new("TextLabel", list)
+	l.Size = UDim2.new(1,-4,0,22)
+	l.BackgroundTransparency = 1
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.TextColor3 = Color3.new(1,1,1)
+	l.Text = name .. " | " .. t
 end
 
 --====================================================
--- 自动拾取（方案 A）
+-- 工具函数
 --====================================================
+local function HRP()
+	return Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+end
+
 local function getType(pp)
 	local c = pp.Parent
 	while c do
@@ -175,58 +138,50 @@ local function getType(pp)
 	end
 end
 
+--====================================================
+-- 自动拾取主循环（稳定）
+--====================================================
 task.spawn(function()
 	while Running do
-		task.wait(SCAN_INTERVAL)
-		if Busy then continue end
+		task.wait(SCAN)
+		if busy then continue end
 
 		local hrp = HRP()
-		local best, dist = nil, math.huge
+		if not hrp then continue end
 
-		for _, pp in ipairs(workspace:GetDescendants()) do
+		for _,pp in ipairs(workspace:GetDescendants()) do
+			if not Running then break end
 			if not pp:IsA("ProximityPrompt") or not pp.Enabled then continue end
+
 			local kind, model = getType(pp)
-			if kind == "box" and not AutoBox then continue end
-			if kind == "fruit" and not AutoFruit then continue end
+			if kind == "box" and not State.box then continue end
+			if kind == "fruit" and not State.fruit then continue end
 			if not kind then continue end
 
-			local part = model:FindFirstChildWhichIsA("BasePart")
-			if part then
-				local d = (hrp.Position - part.Position).Magnitude
-				if d < dist and d <= MAX_DIST then
-					best, dist = pp, d
-				end
-			end
-		end
+			local part = pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
+			if not part:IsA("BasePart") then continue end
 
-		if best then
-			Busy = true
-			local model = best.Parent
-			local part = model:FindFirstChildWhichIsA("BasePart")
-			if part then
-				hrp.CFrame = part.CFrame * CFrame.new(0,0,2)
-				task.wait(0.15)
-				if fireproximityprompt then
-					fireproximityprompt(best)
-				end
-			end
-			task.wait(0.3)
-			Busy = false
+			busy = true
+			hrp.CFrame = part.CFrame * CFrame.new(0,0,2)
+			task.wait(0.15)
+			if fireproximityprompt then fireproximityprompt(pp) end
+			task.wait(0.2)
+			busy = false
+			break
 		end
 	end
 end)
 
 --====================================================
--- 果实生成监听
+-- 果实生成监听（修复空 Label）
 --====================================================
 workspace.DescendantAdded:Connect(function(o)
-	if o:IsA("ProximityPrompt") then
-		task.wait(0.1)
-		local kind, model = getType(o)
-		if kind == "fruit" then
-			addFruit(model.Name)
-		end
+	if not o:IsA("ProximityPrompt") then return end
+	task.wait(0.1)
+	local kind, model = getType(o)
+	if kind == "fruit" and model then
+		addFruit(model.Name)
 	end
 end)
 
-warn("✅ PlayerGui 稳定整合版 已加载")
+warn("✅ PlayerGui 稳定整合版 已成功加载")
