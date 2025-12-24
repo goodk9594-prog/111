@@ -2,14 +2,13 @@
 -- Services & Player
 --====================================================
 local Players = game:GetService("Players")
-local CoreGui = game:GetService("CoreGui")
 local UIS = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
 local P = Players.LocalPlayer
 
 --====================================================
--- Anti AFK（PC / Mobile 通用）
+-- Anti AFK（稳定）
 --====================================================
-local VirtualUser = game:GetService("VirtualUser")
 P.Idled:Connect(function()
 	VirtualUser:CaptureController()
 	VirtualUser:ClickButton2(Vector2.new(0,0))
@@ -27,42 +26,34 @@ local FRUIT = {
 	["Nikyu Nikyu Devil Fruit"]=true,
 	["Bari Bari Devil Fruit"]=true,
 }
-local BOX = {Box=true,Chest=true,Barrel=true}
+
+local BOX = {
+	Box=true,
+	Chest=true,
+	Barrel=true
+}
 
 --====================================================
 -- State
 --====================================================
 local S = {boxPick=false, fruitPick=false}
-local busy, bad = false, {}
+local busy = false
+local bad = {}
 local Running = true
 
 --====================================================
--- GUI 清理
+-- GUI（PlayerGui 稳定版）
 --====================================================
 pcall(function()
-	if CoreGui:FindFirstChild("AutoPickGui") then
-		CoreGui.AutoPickGui:Destroy()
-	end
-	if P:FindFirstChild("PlayerGui") and P.PlayerGui:FindFirstChild("AutoPickGui") then
+	if P.PlayerGui:FindFirstChild("AutoPickGui") then
 		P.PlayerGui.AutoPickGui:Destroy()
 	end
 end)
 
---====================================================
--- GUI 创建（★ 电脑 / 手机 兼容关键）
---====================================================
 local gui = Instance.new("ScreenGui")
 gui.Name = "AutoPickGui"
 gui.ResetOnSpawn = false
-
-if gethui then
-	gui.Parent = gethui()
-elseif syn and syn.protect_gui then
-	syn.protect_gui(gui)
-	gui.Parent = CoreGui
-else
-	gui.Parent = P:WaitForChild("PlayerGui")
-end
+gui.Parent = P:WaitForChild("PlayerGui")
 
 --====================================================
 -- 主窗口
@@ -75,7 +66,7 @@ frame.BorderSizePixel = 0
 frame.Visible = true
 
 --====================================================
--- 顶栏（鼠标 / 触摸通用拖拽）
+-- 顶栏（拖拽）
 --====================================================
 local top = Instance.new("Frame", frame)
 top.Size = UDim2.new(1,0,0,30)
@@ -84,8 +75,7 @@ top.BackgroundColor3 = Color3.fromRGB(25,25,25)
 do
 	local dragging, sp, fp
 	top.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1
-		or i.UserInputType == Enum.UserInputType.Touch then
+		if i.UserInputType == Enum.UserInputType.MouseButton1 then
 			dragging = true
 			sp = i.Position
 			fp = frame.Position
@@ -93,16 +83,14 @@ do
 	end)
 
 	UIS.InputChanged:Connect(function(i)
-		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement
-		or i.UserInputType == Enum.UserInputType.Touch) then
+		if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
 			local d = i.Position - sp
 			frame.Position = UDim2.new(fp.X.Scale, fp.X.Offset + d.X, fp.Y.Scale, fp.Y.Offset + d.Y)
 		end
 	end)
 
 	UIS.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1
-		or i.UserInputType == Enum.UserInputType.Touch then
+		if i.UserInputType == Enum.UserInputType.MouseButton1 then
 			dragging = false
 		end
 	end)
@@ -125,15 +113,14 @@ mini.BackgroundColor3 = Color3.fromRGB(80,80,80)
 
 local icon = Instance.new("TextButton", gui)
 icon.Size = UDim2.new(0,44,0,44)
-icon.Position = frame.Position
 icon.Text = "🍎"
 icon.Visible = false
 icon.BackgroundColor3 = Color3.fromRGB(60,60,60)
 
 mini.MouseButton1Click:Connect(function()
+	icon.Position = frame.Position
 	frame.Visible = false
 	icon.Visible = true
-	icon.Position = frame.Position
 end)
 
 icon.MouseButton1Click:Connect(function()
@@ -147,14 +134,15 @@ close.MouseButton1Click:Connect(function()
 end)
 
 --====================================================
--- Toggle
+-- Toggle 按钮
 --====================================================
 local function toggle(y,text,key)
-	local b = Instance.new("TextButton",frame)
+	local b = Instance.new("TextButton", frame)
 	b.Size = UDim2.new(1,-10,0,26)
 	b.Position = UDim2.new(0,5,0,y)
-	b.Text = text.."关"
 	b.BackgroundColor3 = Color3.fromRGB(60,60,60)
+	b.Text = text.."关"
+
 	b.MouseButton1Click:Connect(function()
 		S[key] = not S[key]
 		b.Text = text .. (S[key] and "开" or "关")
@@ -165,32 +153,31 @@ toggle(40,"自动拾取箱子：","boxPick")
 toggle(70,"自动拾取果实：","fruitPick")
 
 --====================================================
--- 坐标传送面板
+-- 果实记录（修复版）
 --====================================================
-local tpBtn = Instance.new("TextButton", frame)
-tpBtn.Size = UDim2.new(1,-10,0,28)
-tpBtn.Position = UDim2.new(0,5,0,110)
-tpBtn.Text = "坐标传送面板"
+local list = Instance.new("ScrollingFrame", frame)
+list.Position = UDim2.new(0,5,0,110)
+list.Size = UDim2.new(1,-10,1,-115)
+list.ScrollBarThickness = 6
+list.CanvasSize = UDim2.new(0,0,0,0)
 
-local tp = Instance.new("Frame", gui)
-tp.Size = UDim2.new(0,200,0,240)
-tp.BackgroundColor3 = Color3.fromRGB(30,30,30)
-tp.Visible = false
+local ll = Instance.new("UIListLayout", list)
+ll.Padding = UDim.new(0,4)
 
-local tpList = Instance.new("UIListLayout", tp)
-tpList.Padding = UDim.new(0,4)
+local function addFruit(name)
+	if not name or name == "" then return end
+	local t = os.time()
 
-local saveBtn = Instance.new("TextButton", tp)
-saveBtn.Size = UDim2.new(1,0,0,28)
-saveBtn.Text = "保存当前位置"
+	local l = Instance.new("TextLabel", list)
+	l.Size = UDim2.new(1,-6,0,20)
+	l.BackgroundTransparency = 1
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.TextWrapped = false
+	l.Text = name.." ["..t.."]"
 
-tpBtn.MouseButton1Click:Connect(function()
-	tp.Visible = not tp.Visible
-	tp.Position = UDim2.new(
-		0, frame.AbsolutePosition.X + frame.AbsoluteSize.X + 10,
-		0, frame.AbsolutePosition.Y
-	)
-end)
+	task.wait()
+	list.CanvasSize = UDim2.new(0,0,0,ll.AbsoluteContentSize.Y + 4)
+end
 
 --====================================================
 -- 工具
@@ -199,50 +186,8 @@ local function HRP()
 	return (P.Character or P.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
 end
 
-saveBtn.MouseButton1Click:Connect(function()
-	local cf = HRP().CFrame
-	local item = Instance.new("Frame", tp)
-	item.Size = UDim2.new(1,0,0,26)
-
-	local go = Instance.new("TextButton", item)
-	go.Size = UDim2.new(0.7,0,1,0)
-	go.Text = "传送"
-	go.MouseButton1Click:Connect(function()
-		HRP().CFrame = cf
-	end)
-
-	local del = Instance.new("TextButton", item)
-	del.Size = UDim2.new(0.3,0,1,0)
-	del.Position = UDim2.new(0.7,0,0,0)
-	del.Text = "删除"
-	del.MouseButton1Click:Connect(function()
-		item:Destroy()
-	end)
-end)
-
 --====================================================
--- 果实记录
---====================================================
-local list = Instance.new("ScrollingFrame", frame)
-list.Position = UDim2.new(0,5,0,150)
-list.Size = UDim2.new(1,-10,1,-155)
-list.ScrollBarThickness = 6
-
-local ll = Instance.new("UIListLayout", list)
-ll.Padding = UDim.new(0,4)
-
-local function addFruit(name)
-	local t = os.date("%H:%M:%S")
-	local l = Instance.new("TextLabel", list)
-	l.Size = UDim2.new(1,-4,0,20)
-	l.BackgroundTransparency = 1
-	l.TextXAlignment = Enum.TextXAlignment.Left
-	l.Text = name .. " | " .. t
-	list.CanvasSize = UDim2.new(0,0,0,ll.AbsoluteContentSize.Y)
-end
-
---====================================================
--- 自动拾取（原逻辑不变）
+-- 自动拾取（方案 A）
 --====================================================
 local function getType(pp)
 	local c = pp.Parent
@@ -254,60 +199,67 @@ local function getType(pp)
 end
 
 local function bestPrompt()
-	local hrp,best,dist,now = HRP(),nil,math.huge,os.clock()
+	local hrp = HRP()
+	local best, dist = nil, math.huge
+	local now = os.clock()
+
 	for _,pp in ipairs(workspace:GetDescendants()) do
 		if not Running then return end
 		if not (pp:IsA("ProximityPrompt") and pp.Enabled) then continue end
 		if bad[pp] and bad[pp] > now then continue end
 
-		local kind = getType(pp)
-		if kind=="box" and not S.boxPick then continue end
-		if kind=="fruit" and not S.fruitPick then continue end
+		local kind, model = getType(pp)
 		if not kind then continue end
+		if kind == "box" and not S.boxPick then continue end
+		if kind == "fruit" and not S.fruitPick then continue end
 
 		local part = pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
 		if part:IsA("BasePart") then
 			local d = (hrp.Position - part.Position).Magnitude
-			if d <= MAX_DIST and d < dist then
-				best,dist = pp,d
+			if d < dist and d <= MAX_DIST then
+				best, dist = pp, d
 			end
 		end
 	end
+
 	return best
 end
 
 task.spawn(function()
 	while Running do
 		task.wait(SCAN)
-		if not busy then
-			local pp = bestPrompt()
-			if pp then
-				busy = true
-				local part = pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
-				HRP().CFrame = part.CFrame * CFrame.new(0,0,2)
-				task.wait(0.15)
-				if fireproximityprompt then
-					fireproximityprompt(pp)
-				end
-				task.wait(0.25)
-				if pp.Parent then
-					bad[pp] = os.clock() + FAIL_CD
-				end
-				busy = false
+		if busy then continue end
+
+		local pp = bestPrompt()
+		if pp then
+			busy = true
+			local part = pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
+			HRP().CFrame = part.CFrame * CFrame.new(0,0,2)
+
+			task.wait(0.15)
+			if fireproximityprompt then
+				fireproximityprompt(pp)
 			end
+
+			task.wait(0.25)
+			bad[pp] = os.clock() + FAIL_CD
+			busy = false
 		end
 	end
 end)
 
+--====================================================
+-- 果实生成监听（稳定）
+--====================================================
 workspace.DescendantAdded:Connect(function(o)
 	if not Running then return end
-	if o:IsA("ProximityPrompt") then
-		task.wait(0.1)
-		local kind,model = getType(o)
-		if kind=="fruit" and model then
-			addFruit(model.Name)
-		end
+	if not o:IsA("ProximityPrompt") then return end
+
+	task.wait(0.1)
+	local kind, model = getType(o)
+	if kind == "fruit" and model and model.Name then
+		addFruit(model.Name)
 	end
 end)
 
-warn("✅ 终极稳定整合版（电脑可用）已加载")
+warn("✅ PlayerGui 稳定终极整合版 已加载")
