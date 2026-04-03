@@ -16,7 +16,8 @@ local autoFight = false
 local autoSkill = false
 local running = true
 local currentTarget = nil
-local lockedCFrame = nil   -- 用于锁定位置和朝向
+local alignPos = nil
+local alignOri = nil
 
 --// GUI （完全没改）
 local gui = Instance.new("ScreenGui")
@@ -66,7 +67,6 @@ skillButton.TextColor3 = Color3.new(1,1,1)
 
 --// 找敌人 （完全没改）
 local function getClosestEnemy()
-
     local char = player.Character
     if not char then return end
 
@@ -79,29 +79,19 @@ local function getClosestEnemy()
     local shortest = detectRange
 
     for _,part in pairs(parts) do
-
         local model = part:FindFirstAncestorOfClass("Model")
-
         if model and model \~= char then
-
             local humanoid = model:FindFirstChildOfClass("Humanoid")
             local enemyHRP = model:FindFirstChild("HumanoidRootPart")
-
             if humanoid and enemyHRP and humanoid.Health > 0 then
-
                 local dist = (enemyHRP.Position - hrp.Position).Magnitude
-
                 if dist < shortest then
                     shortest = dist
                     closest = model
                 end
-
             end
-
         end
-
     end
-
     return closest
 end
 
@@ -119,6 +109,8 @@ end)
 -- 关闭脚本 （完全没改）
 closeButton.MouseButton1Click:Connect(function()
     running = false
+    if alignPos then alignPos:Destroy() end
+    if alignOri then alignOri:Destroy() end
     gui:Destroy()
 end)
 
@@ -126,7 +118,6 @@ end)
 task.spawn(function()
     while running do
         task.wait(detectDelay)
-
         if autoFight then
             currentTarget = getClosestEnemy()
         else
@@ -135,34 +126,46 @@ task.spawn(function()
     end
 end)
 
--- 位置锁定（改用 Heartbeat，更不容易触发注入失败或检测）
+-- 温和位置锁定（使用 AlignPosition + AlignOrientation，检测风险最低）
 RunService.Heartbeat:Connect(function()
     if not running then return end
     if not autoFight then 
-        lockedCFrame = nil
+        if alignPos then alignPos:Destroy() alignPos = nil end
+        if alignOri then alignOri:Destroy() alignOri = nil end
         return 
     end
 
     local char = player.Character
     if not char then return end
-
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
-    -- 第一次记录当前的位置和朝向
-    if not lockedCFrame then
-        lockedCFrame = hrp.CFrame
+    -- 创建/更新约束（只在需要时创建）
+    if not alignPos then
+        alignPos = Instance.new("AlignPosition")
+        alignPos.MaxForce = 999999999
+        alignPos.Responsiveness = 200
+        alignPos.Parent = hrp
+        alignPos.Attachment0 = hrp:FindFirstChild("RootAttachment") or Instance.new("Attachment", hrp)
     end
 
-    -- 强制锁定（被打飞或按WASD都会立刻拉回）
-    hrp.CFrame = lockedCFrame
+    if not alignOri then
+        alignOri = Instance.new("AlignOrientation")
+        alignOri.MaxTorque = 999999999
+        alignOri.Responsiveness = 200
+        alignOri.Parent = hrp
+        alignOri.Attachment0 = hrp:FindFirstChild("RootAttachment") or Instance.new("Attachment", hrp)
+    end
+
+    -- 锁定当前位置和当前朝向
+    alignPos.Position = hrp.Position
+    alignOri.CFrame = hrp.CFrame
 end)
 
 -- 自动技能 （完全没改）
 task.spawn(function()
     while running do
         task.wait(0.5)
-
         if autoSkill then
             for _,key in pairs(skills) do
                 VirtualInputManager:SendKeyEvent(true,key,false,game)
