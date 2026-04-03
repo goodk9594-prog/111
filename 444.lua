@@ -16,9 +16,9 @@ local autoFight = false
 local autoSkill = false
 local running = true
 local currentTarget = nil
-local lockedCFrame = nil   -- 新增：用于锁定位置和朝向
+local lockedCFrame = nil   -- 用于锁定位置和朝向
 
---// GUI
+--// GUI （完全没改）
 local gui = Instance.new("ScreenGui")
 gui.Parent = game.CoreGui
 
@@ -64,7 +64,7 @@ skillButton.Text = "Auto Skill: OFF"
 skillButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
 skillButton.TextColor3 = Color3.new(1,1,1)
 
---// 找敌人
+--// 找敌人 （完全没改）
 local function getClosestEnemy()
 
     local char = player.Character
@@ -104,32 +104,26 @@ local function getClosestEnemy()
 
     return closest
 end
--- 按钮
-fightButton.MouseButton1Click:Connect(function()
 
+-- 按钮 （完全没改）
+fightButton.MouseButton1Click:Connect(function()
     autoFight = not autoFight
     fightButton.Text = autoFight and "Auto Fight: ON" or "Auto Fight: OFF"
-
 end)
 
 skillButton.MouseButton1Click:Connect(function()
-
     autoSkill = not autoSkill
     skillButton.Text = autoSkill and "Auto Skill: ON" or "Auto Skill: OFF"
-
 end)
 
--- 关闭脚本
+-- 关闭脚本 （完全没改）
 closeButton.MouseButton1Click:Connect(function()
-
     running = false
     gui:Destroy()
-
 end)
 
--- 检测Boss
+-- 检测Boss （完全没改）
 task.spawn(function()
-
     while running do
         task.wait(detectDelay)
 
@@ -138,16 +132,11 @@ task.spawn(function()
         else
             currentTarget = nil
         end
-
     end
-
 end)
 
--- 位置锁定（取代原来的跟随逻辑）
--- 功能：开启 Auto Fight 后角色**完全不动**、朝向不变
--- 即使被敌人打飞、自己按WASD、或者任何物理力，位置和朝向都会被强制锁死
-RunService.RenderStepped:Connect(function()
-
+-- 位置锁定（改用 Heartbeat，更不容易触发注入失败或检测）
+RunService.Heartbeat:Connect(function()
     if not running then return end
     if not autoFight then 
         lockedCFrame = nil
@@ -160,34 +149,26 @@ RunService.RenderStepped:Connect(function()
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
-    -- 第一次检测到开启时，记录当前的位置和朝向
+    -- 第一次记录当前的位置和朝向
     if not lockedCFrame then
         lockedCFrame = hrp.CFrame
     end
 
-    -- 强制锁定（角色完全不动）
+    -- 强制锁定（被打飞或按WASD都会立刻拉回）
     hrp.CFrame = lockedCFrame
-
 end)
 
--- 自动技能
+-- 自动技能 （完全没改）
 task.spawn(function()
-
     while running do
         task.wait(0.5)
 
         if autoSkill then
-
             for _,key in pairs(skills) do
-
                 VirtualInputManager:SendKeyEvent(true,key,false,game)
                 task.wait(0.05)
                 VirtualInputManager:SendKeyEvent(false,key,false,game)
-
             end
-
         end
-
     end
-
 end)
