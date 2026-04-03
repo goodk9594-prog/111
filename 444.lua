@@ -74,164 +74,172 @@ interactButton.Text = "Auto Interact: OFF"
 interactButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
 interactButton.TextColor3 = Color3.new(1,1,1)
 
---// 按钮事件
+--// 按钮
 fightButton.MouseButton1Click:Connect(function()
-    autoFight = not autoFight
-    fightButton.Text = autoFight and "Auto Fight: ON" or "Auto Fight: OFF"
+autoFight = not autoFight
+fightButton.Text = autoFight and "Auto Fight: ON" or "Auto Fight: OFF"
 end)
 
 skillButton.MouseButton1Click:Connect(function()
-    autoSkill = not autoSkill
-    skillButton.Text = autoSkill and "Auto Skill: ON" or "Auto Skill: OFF"
+autoSkill = not autoSkill
+skillButton.Text = autoSkill and "Auto Skill: ON" or "Auto Skill: OFF"
 end)
 
 interactButton.MouseButton1Click:Connect(function()
-    autoInteract = not autoInteract
-    interactButton.Text = autoInteract and "Auto Interact: ON" or "Auto Interact: OFF"
+autoInteract = not autoInteract
+interactButton.Text = autoInteract and "Auto Interact: ON" or "Auto Interact: OFF"
 end)
 
 closeButton.MouseButton1Click:Connect(function()
-    running = false
-    gui:Destroy()
+running = false
+gui:Destroy()
 end)
 
---// 找Boss（范围检测）
+--// 找Boss
 local function getClosestEnemy()
 
-    local char = player.Character
-    if not char then return end
+```
+local char = player.Character
+if not char then return end
 
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
+local hrp = char:FindFirstChild("HumanoidRootPart")
+if not hrp then return end
 
-    local parts = workspace:GetPartBoundsInRadius(hrp.Position, detectRange)
+local parts = workspace:GetPartBoundsInRadius(hrp.Position, detectRange)
 
-    local closest
-    local shortest = detectRange
+local closest
+local shortest = detectRange
 
-    for _,part in pairs(parts) do
+for _,part in pairs(parts) do
 
-        local model = part:FindFirstAncestorOfClass("Model")
+    local model = part:FindFirstAncestorOfClass("Model")
 
-        if model and model ~= char then
+    if model and model ~= char then
 
-            local humanoid = model:FindFirstChildOfClass("Humanoid")
-            local enemyHRP = model:FindFirstChild("HumanoidRootPart")
+        local humanoid = model:FindFirstChildOfClass("Humanoid")
+        local enemyHRP = model:FindFirstChild("HumanoidRootPart")
 
-            if humanoid and enemyHRP and humanoid.Health > 0 then
+        if humanoid and enemyHRP and humanoid.Health > 0 then
 
-                local dist = (enemyHRP.Position - hrp.Position).Magnitude
+            local dist = (enemyHRP.Position - hrp.Position).Magnitude
 
-                if dist < shortest then
-                    shortest = dist
-                    closest = model
-                end
-
+            if dist < shortest then
+                shortest = dist
+                closest = model
             end
 
         end
 
     end
 
-    return closest
 end
 
---// 低频Boss检测
+return closest
+```
+
+end
+
+--// Boss检测
 task.spawn(function()
 
-    while running do
-        task.wait(detectDelay)
+```
+while running do
+    task.wait(detectDelay)
 
-        if autoFight then
-            currentTarget = getClosestEnemy()
-        else
-            currentTarget = nil
-        end
-
+    if autoFight then
+        currentTarget = getClosestEnemy()
+    else
+        currentTarget = nil
     end
+
+end
+```
 
 end)
 
---// 锁Boss + 禁止移动
+--// 锁Boss
 RunService.RenderStepped:Connect(function()
 
-    if not running then return end
-    if not autoFight then return end
-    if not currentTarget then return end
+```
+if not running then return end
+if not autoFight then return end
+if not currentTarget then return end
 
-    local char = player.Character
-    if not char then return end
+local char = player.Character
+if not char then return end
 
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    local hrp = char:FindFirstChild("HumanoidRootPart")
+local humanoid = char:FindFirstChildOfClass("Humanoid")
+local hrp = char:FindFirstChild("HumanoidRootPart")
 
-    if not humanoid or not hrp then return end
+if not humanoid or not hrp then return end
 
-    local targetHRP = currentTarget:FindFirstChild("HumanoidRootPart")
-    if not targetHRP then return end
+local targetHRP = currentTarget:FindFirstChild("HumanoidRootPart")
+if not targetHRP then return end
 
-    humanoid.WalkSpeed = 0
-    humanoid.JumpPower = 0
+humanoid.WalkSpeed = 0
+humanoid.JumpPower = 0
 
-    local direction = (hrp.Position - targetHRP.Position).Unit
-    local lockPos = targetHRP.Position + direction * followDistance
+local direction = (hrp.Position - targetHRP.Position).Unit
+local lockPos = targetHRP.Position + direction * followDistance
 
-    hrp.CFrame = CFrame.new(lockPos, targetHRP.Position)
+hrp.CFrame = CFrame.new(lockPos, targetHRP.Position)
+```
 
 end)
 
 --// 自动技能
 task.spawn(function()
 
-    while running do
-        task.wait(0.5)
+```
+while running do
+    task.wait(0.5)
 
-        if autoSkill then
+    if autoSkill then
 
-            for _,key in pairs(skills) do
+        for _,key in pairs(skills) do
 
-                VirtualInputManager:SendKeyEvent(true,key,false,game)
-                task.wait(0.05)
-                VirtualInputManager:SendKeyEvent(false,key,false,game)
-
-            end
+            VirtualInputManager:SendKeyEvent(true,key,false,game)
+            task.wait(0.05)
+            VirtualInputManager:SendKeyEvent(false,key,false,game)
 
         end
 
     end
+
+end
+```
 
 end)
 
 --// 自动E交互
 task.spawn(function()
 
-    while running do
-        task.wait(0.4)
+```
+while running do
+    task.wait(0.4)
 
-        if autoInteract then
+    if autoInteract then
 
-            local char = player.Character
-            if not char then continue end
+        local char = player.Character
+        if not char then continue end
 
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if not hrp then continue end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then continue end
 
-            for _,v in pairs(workspace:GetDescendants()) do
+        for _,v in pairs(workspace:GetDescendants()) do
 
-                if v:IsA("ProximityPrompt") then
+            if v:IsA("ProximityPrompt") then
 
-                    local part = v.Parent
+                local part = v.Parent
 
-                    if part and part:IsA("BasePart") then
+                if part and part:IsA("BasePart") then
 
-                        local dist = (part.Position - hrp.Position).Magnitude
+                    local dist = (part.Position - hrp.Position).Magnitude
 
-                        if dist <= interactRange then
+                    if dist <= interactRange then
 
-                            v.HoldDuration = 0
-                            fireproximityprompt(v)
-
-                        end
+                        v.HoldDuration = 0
+                        fireproximityprompt(v)
 
                     end
 
@@ -242,5 +250,8 @@ task.spawn(function()
         end
 
     end
+
+end
+```
 
 end)
