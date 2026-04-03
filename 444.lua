@@ -1,302 +1,246 @@
---====================================================
--- Services & Player
---====================================================
+--// Services
 local Players = game:GetService("Players")
-local CoreGui = game:GetService("CoreGui")
-local UIS = game:GetService("UserInputService")
-local P = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
---====================================================
--- Anti AFK
---====================================================
-local VirtualUser = game:GetService("VirtualUser")
+local player = Players.LocalPlayer
 
-P.Idled:Connect(function()
-	VirtualUser:CaptureController()
-	VirtualUser:ClickButton2(Vector2.new(0,0))
+--// 设置
+local skills = {"E","R","T","Y","G"}
+local followDistance = 6
+local detectRange = 80
+local detectDelay = 0.8
+local interactRange = 12
+
+--// 状态
+local autoFight = false
+local autoSkill = false
+local autoInteract = false
+local running = true
+local currentTarget = nil
+
+--// GUI
+local gui = Instance.new("ScreenGui")
+gui.Parent = game.CoreGui
+
+local frame = Instance.new("Frame")
+frame.Parent = gui
+frame.Size = UDim2.new(0,230,0,210)
+frame.Position = UDim2.new(0.5,-115,0.5,-105)
+frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+frame.Active = true
+frame.Draggable = true
+
+local title = Instance.new("TextLabel")
+title.Parent = frame
+title.Size = UDim2.new(1,0,0,30)
+title.Text = "Auto Boss Farm"
+title.TextColor3 = Color3.new(1,1,1)
+title.BackgroundTransparency = 1
+
+-- 关闭按钮
+local closeButton = Instance.new("TextButton")
+closeButton.Parent = frame
+closeButton.Size = UDim2.new(0,30,0,30)
+closeButton.Position = UDim2.new(1,-30,0,0)
+closeButton.Text = "X"
+closeButton.BackgroundColor3 = Color3.fromRGB(170,0,0)
+closeButton.TextColor3 = Color3.new(1,1,1)
+
+-- Auto Fight
+local fightButton = Instance.new("TextButton")
+fightButton.Parent = frame
+fightButton.Size = UDim2.new(0.8,0,0,35)
+fightButton.Position = UDim2.new(0.1,0,0.25,0)
+fightButton.Text = "Auto Fight: OFF"
+fightButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
+fightButton.TextColor3 = Color3.new(1,1,1)
+
+-- Auto Skill
+local skillButton = Instance.new("TextButton")
+skillButton.Parent = frame
+skillButton.Size = UDim2.new(0.8,0,0,35)
+skillButton.Position = UDim2.new(0.1,0,0.45,0)
+skillButton.Text = "Auto Skill: OFF"
+skillButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
+skillButton.TextColor3 = Color3.new(1,1,1)
+
+-- Auto Interact
+local interactButton = Instance.new("TextButton")
+interactButton.Parent = frame
+interactButton.Size = UDim2.new(0.8,0,0,35)
+interactButton.Position = UDim2.new(0.1,0,0.65,0)
+interactButton.Text = "Auto Interact: OFF"
+interactButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
+interactButton.TextColor3 = Color3.new(1,1,1)
+
+--// 按钮事件
+fightButton.MouseButton1Click:Connect(function()
+    autoFight = not autoFight
+    fightButton.Text = autoFight and "Auto Fight: ON" or "Auto Fight: OFF"
 end)
 
---====================================================
--- Config（方案 A）
---====================================================
-local MAX_DIST, FAIL_CD, SCAN = 3000, 6, 0.4
-
-local FRUIT = {
-	["Requiem Arrow"] = true,
-	["Vampire Mask"] = true,
-	["Shadow Camera"] = true,
-	["Holy Corpse"] = true,
-	["Nostalgic Relic"] = true,
-	["Monochromatic Sphere"] = true,
-	["Ender Pearl"] = true,
-	["Galaxy Portal"] = true,
-}
-local BOX = {Box=true,Chest=true,Barrel=true}
-
---====================================================
--- State
---====================================================
-local S = {boxPick=false, fruitPick=false}
-local busy, bad = false, {}
-local Running = true
-
---====================================================
--- GUI 清理
---====================================================
-pcall(function() CoreGui.AutoPickGui:Destroy() end)
-
-local gui = Instance.new("ScreenGui", CoreGui)
-gui.Name = "AutoPickGui"
-
---====================================================
--- 主窗口
---====================================================
-local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.new(0,220,0,320)
-frame.Position = UDim2.new(0,20,0,120)
-frame.BackgroundColor3 = Color3.fromRGB(35,35,35)
-frame.BorderSizePixel = 0
-
---====================================================
--- 顶栏（拖拽）
---====================================================
-local top = Instance.new("Frame", frame)
-top.Size = UDim2.new(1,0,0,30)
-top.BackgroundColor3 = Color3.fromRGB(25,25,25)
-
-do
-	local dragging, sp, fp
-	top.InputBegan:Connect(function(i)
-		if i.UserInputType==Enum.UserInputType.Touch or i.UserInputType==Enum.UserInputType.MouseButton1 then
-			dragging=true
-			sp=i.Position
-			fp=frame.Position
-		end
-	end)
-	UIS.InputChanged:Connect(function(i)
-		if dragging and (i.UserInputType==Enum.UserInputType.Touch or i.UserInputType==Enum.UserInputType.MouseMovement) then
-			local d=i.Position-sp
-			frame.Position=UDim2.new(fp.X.Scale,fp.X.Offset+d.X,fp.Y.Scale,fp.Y.Offset+d.Y)
-		end
-	end)
-	top.InputEnded:Connect(function() dragging=false end)
-end
-
---====================================================
--- 最小化 / 关闭
---====================================================
-local close = Instance.new("TextButton", top)
-close.Size = UDim2.new(0,26,0,22)
-close.Position = UDim2.new(1,-30,0,4)
-close.Text = "X"
-close.BackgroundColor3 = Color3.fromRGB(150,60,60)
-
-local mini = Instance.new("TextButton", top)
-mini.Size = UDim2.new(0,26,0,22)
-mini.Position = UDim2.new(1,-60,0,4)
-mini.Text = "-"
-mini.BackgroundColor3 = Color3.fromRGB(80,80,80)
-
-local icon = Instance.new("TextButton", gui)
-icon.Size = UDim2.new(0,44,0,44)
-icon.Position = frame.Position
-icon.Text = "🍎"
-icon.Visible = false
-icon.BackgroundColor3 = Color3.fromRGB(60,60,60)
-
-mini.MouseButton1Click:Connect(function()
-	frame.Visible = false
-	icon.Visible = true
-	icon.Position = frame.Position
+skillButton.MouseButton1Click:Connect(function()
+    autoSkill = not autoSkill
+    skillButton.Text = autoSkill and "Auto Skill: ON" or "Auto Skill: OFF"
 end)
 
-icon.MouseButton1Click:Connect(function()
-	frame.Visible = true
-	icon.Visible = false
+interactButton.MouseButton1Click:Connect(function()
+    autoInteract = not autoInteract
+    interactButton.Text = autoInteract and "Auto Interact: ON" or "Auto Interact: OFF"
 end)
 
-close.MouseButton1Click:Connect(function()
-	Running = false
-	gui:Destroy()
+closeButton.MouseButton1Click:Connect(function()
+    running = false
+    gui:Destroy()
 end)
 
--- icon 手机拖拽
-do
-	local dragging, sp, fp
-	icon.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			sp = i.Position
-			fp = icon.Position
-		end
-	end)
-	icon.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.Touch then dragging = false end
-	end)
-	UIS.InputChanged:Connect(function(i)
-		if dragging and i.UserInputType == Enum.UserInputType.Touch then
-			local d = i.Position - sp
-			icon.Position = UDim2.new(fp.X.Scale, fp.X.Offset+d.X, fp.Y.Scale, fp.Y.Offset+d.Y)
-		end
-	end)
+--// 找Boss（范围检测）
+local function getClosestEnemy()
+
+    local char = player.Character
+    if not char then return end
+
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local parts = workspace:GetPartBoundsInRadius(hrp.Position, detectRange)
+
+    local closest
+    local shortest = detectRange
+
+    for _,part in pairs(parts) do
+
+        local model = part:FindFirstAncestorOfClass("Model")
+
+        if model and model ~= char then
+
+            local humanoid = model:FindFirstChildOfClass("Humanoid")
+            local enemyHRP = model:FindFirstChild("HumanoidRootPart")
+
+            if humanoid and enemyHRP and humanoid.Health > 0 then
+
+                local dist = (enemyHRP.Position - hrp.Position).Magnitude
+
+                if dist < shortest then
+                    shortest = dist
+                    closest = model
+                end
+
+            end
+
+        end
+
+    end
+
+    return closest
 end
 
---====================================================
--- Toggle
---====================================================
-local function toggle(y,text,key)
-	local b=Instance.new("TextButton",frame)
-	b.Size=UDim2.new(1,-10,0,26)
-	b.Position=UDim2.new(0,5,0,y)
-	b.Text=text.."关"
-	b.BackgroundColor3=Color3.fromRGB(60,60,60)
-	b.MouseButton1Click:Connect(function()
-		S[key]=not S[key]
-		b.Text=text..(S[key] and "开" or "关")
-	end)
-end
-
-toggle(40,"自动拾取箱子：","boxPick")
-toggle(70,"自动拾取果实：","fruitPick")
-
---====================================================
--- 坐标传送面板
---====================================================
-local tpBtn = Instance.new("TextButton", frame)
-tpBtn.Size = UDim2.new(1,-10,0,28)
-tpBtn.Position = UDim2.new(0,5,0,110)
-tpBtn.Text = "坐标传送面板"
-
-local tp = Instance.new("Frame", gui)
-tp.Size = UDim2.new(0,200,0,240)
-tp.BackgroundColor3 = Color3.fromRGB(30,30,30)
-tp.Visible = false
-
-local tpList = Instance.new("UIListLayout", tp)
-tpList.Padding = UDim.new(0,4)
-
-local saveBtn = Instance.new("TextButton", tp)
-saveBtn.Size = UDim2.new(1,0,0,28)
-saveBtn.Text = "保存当前位置"
-
-tpBtn.MouseButton1Click:Connect(function()
-	tp.Visible = not tp.Visible
-	tp.Position = UDim2.new(
-		0, frame.AbsolutePosition.X + frame.AbsoluteSize.X + 10,
-		0, frame.AbsolutePosition.Y
-	)
-end)
-
---====================================================
--- 工具
---====================================================
-local function HRP()
-	return (P.Character or P.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
-end
-
-saveBtn.MouseButton1Click:Connect(function()
-	local cf = HRP().CFrame
-	local item = Instance.new("Frame", tp)
-	item.Size = UDim2.new(1,0,0,26)
-
-	local go = Instance.new("TextButton", item)
-	go.Size = UDim2.new(0.7,0,1,0)
-	go.Text = "传送"
-	go.MouseButton1Click:Connect(function()
-		HRP().CFrame = cf
-	end)
-
-	local del = Instance.new("TextButton", item)
-	del.Size = UDim2.new(0.3,0,1,0)
-	del.Position = UDim2.new(0.7,0,0,0)
-	del.Text = "删除"
-	del.MouseButton1Click:Connect(function()
-		item:Destroy()
-	end)
-end)
-
---====================================================
--- 果实记录
---====================================================
-local list = Instance.new("ScrollingFrame", frame)
-list.Position = UDim2.new(0,5,0,150)
-list.Size = UDim2.new(1,-10,1,-155)
-list.ScrollBarThickness = 6
-
-local ll = Instance.new("UIListLayout", list)
-ll.Padding = UDim.new(0,4)
-
-local function addFruit(name)
-	local t = os.time()
-	local l = Instance.new("TextLabel", list)
-	l.Size = UDim2.new(1,-4,0,20)
-	l.BackgroundTransparency = 1
-	l.TextXAlignment = Left
-	l.Text = name.." ["..t.."]"
-	list.CanvasSize = UDim2.new(0,0,0,ll.AbsoluteContentSize.Y)
-end
-
---====================================================
--- 自动拾取（方案 A 原逻辑）
---====================================================
-local function getType(pp)
-	local c=pp.Parent
-	while c do
-		if FRUIT[c.Name] then return "fruit",c end
-		if BOX[c.Name] then return "box",c end
-		c=c.Parent
-	end
-end
-
-local function bestPrompt()
-	local hrp,best,dist,now=HRP(),nil,math.huge,os.clock()
-	for _,pp in ipairs(workspace:GetDescendants()) do
-		if not Running then return end
-		if not (pp:IsA("ProximityPrompt") and pp.Enabled) then continue end
-		if bad[pp] and bad[pp]>now then continue end
-
-		local kind=getType(pp)
-		if kind=="box" and not S.boxPick then continue end
-		if kind=="fruit" and not S.fruitPick then continue end
-		if not kind then continue end
-
-		local part=pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
-		if part:IsA("BasePart") then
-			local d=(hrp.Position-part.Position).Magnitude
-			if d<=MAX_DIST and d<dist then best,dist=pp,d end
-		end
-	end
-	return best
-end
-
+--// 低频Boss检测
 task.spawn(function()
-	while Running do
-		task.wait(SCAN)
-		if not busy then
-			local pp=bestPrompt()
-			if pp then
-				busy=true
-				local part=pp.Parent:IsA("Attachment") and pp.Parent.Parent or pp.Parent
-				HRP().CFrame=part.CFrame*CFrame.new(0,0,2)
-				task.wait(0.15)
-				if fireproximityprompt then fireproximityprompt(pp) end
-				task.wait(0.25)
-				if pp.Parent then bad[pp]=os.clock()+FAIL_CD end
-				busy=false
-			end
-		end
-	end
+
+    while running do
+        task.wait(detectDelay)
+
+        if autoFight then
+            currentTarget = getClosestEnemy()
+        else
+            currentTarget = nil
+        end
+
+    end
+
 end)
 
-workspace.DescendantAdded:Connect(function(o)
-	if not Running then return end
-	if o:IsA("ProximityPrompt") then
-		task.wait(0.1)
-		local kind,model=getType(o)
-		if kind=="fruit" then
-			addFruit(model.Name)
-		end
-	end
+--// 锁Boss + 禁止移动
+RunService.RenderStepped:Connect(function()
+
+    if not running then return end
+    if not autoFight then return end
+    if not currentTarget then return end
+
+    local char = player.Character
+    if not char then return end
+
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+
+    if not humanoid or not hrp then return end
+
+    local targetHRP = currentTarget:FindFirstChild("HumanoidRootPart")
+    if not targetHRP then return end
+
+    humanoid.WalkSpeed = 0
+    humanoid.JumpPower = 0
+
+    local direction = (hrp.Position - targetHRP.Position).Unit
+    local lockPos = targetHRP.Position + direction * followDistance
+
+    hrp.CFrame = CFrame.new(lockPos, targetHRP.Position)
+
 end)
 
-warn("✅ 终极稳定整合版 已加载")
+--// 自动技能
+task.spawn(function()
+
+    while running do
+        task.wait(0.5)
+
+        if autoSkill then
+
+            for _,key in pairs(skills) do
+
+                VirtualInputManager:SendKeyEvent(true,key,false,game)
+                task.wait(0.05)
+                VirtualInputManager:SendKeyEvent(false,key,false,game)
+
+            end
+
+        end
+
+    end
+
+end)
+
+--// 自动E交互
+task.spawn(function()
+
+    while running do
+        task.wait(0.4)
+
+        if autoInteract then
+
+            local char = player.Character
+            if not char then continue end
+
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
+
+            for _,v in pairs(workspace:GetDescendants()) do
+
+                if v:IsA("ProximityPrompt") then
+
+                    local part = v.Parent
+
+                    if part and part:IsA("BasePart") then
+
+                        local dist = (part.Position - hrp.Position).Magnitude
+
+                        if dist <= interactRange then
+
+                            v.HoldDuration = 0
+                            fireproximityprompt(v)
+
+                        end
+
+                    end
+
+                end
+
+            end
+
+        end
+
+    end
+
+end)
