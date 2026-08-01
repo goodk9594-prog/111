@@ -1,6 +1,3 @@
--- LocalScript（更稳健版）
--- 放在 StarterPlayerScripts
-
 local Players = game:GetService("Players")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
@@ -11,7 +8,6 @@ local enabled = false
 local DETECT_RANGE = 300
 local DETECT_INTERVAL = 0.5
 
--- 安全获取角色
 local function updateCharacter()
 	character = player.Character
 	if character then
@@ -31,7 +27,6 @@ player.CharacterRemoving:Connect(function()
 	humanoidRootPart = nil
 end)
 
--- ==================== UI ====================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "AutoPickupUI"
 screenGui.ResetOnSpawn = false
@@ -55,7 +50,7 @@ local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 32)
 title.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
 title.BorderSizePixel = 0
-title.Text = "自动拾取"
+title.Text = "Auto Pickup"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 16
@@ -70,7 +65,7 @@ toggleBtn.Size = UDim2.new(0.85, 0, 0, 36)
 toggleBtn.Position = UDim2.new(0.075, 0, 0.32, 0)
 toggleBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
 toggleBtn.BorderSizePixel = 0
-toggleBtn.Text = "开启自动拾取"
+toggleBtn.Text = "Enable"
 toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 toggleBtn.Font = Enum.Font.Gotham
 toggleBtn.TextSize = 14
@@ -85,7 +80,7 @@ closeBtn.Size = UDim2.new(0.85, 0, 0, 32)
 closeBtn.Position = UDim2.new(0.075, 0, 0.65, 0)
 closeBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
 closeBtn.BorderSizePixel = 0
-closeBtn.Text = "关闭UI"
+closeBtn.Text = "Close UI"
 closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 closeBtn.Font = Enum.Font.Gotham
 closeBtn.TextSize = 14
@@ -94,8 +89,6 @@ closeBtn.Parent = mainFrame
 local closeCorner = Instance.new("UICorner")
 closeCorner.CornerRadius = UDim.new(0, 8)
 closeCorner.Parent = closeBtn
-
--- ==================== 核心逻辑 ====================
 
 local function getClosestItems()
 	local itemsFolder = workspace:FindFirstChild("item")
@@ -139,7 +132,6 @@ local function tryPickup(part)
 	end)
 	if not success then return end
 
-	-- 修改长按为瞬间触发
 	local prompt = part:FindFirstChildOfClass("ProximityPrompt")
 	if not prompt then
 		prompt = part:FindFirstChildWhichIsA("ProximityPrompt", true)
@@ -156,7 +148,6 @@ local function tryPickup(part)
 	pressE()
 end
 
--- 主循环
 task.spawn(function()
 	while true do
 		if enabled and humanoidRootPart and humanoidRootPart.Parent then
@@ -171,14 +162,13 @@ task.spawn(function()
 	end
 end)
 
--- 按钮
 toggleBtn.MouseButton1Click:Connect(function()
 	enabled = not enabled
 	if enabled then
-		toggleBtn.Text = "关闭自动拾取"
+		toggleBtn.Text = "Disable"
 		toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 140, 70)
 	else
-		toggleBtn.Text = "开启自动拾取"
+		toggleBtn.Text = "Enable"
 		toggleBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
 	end
 end)
@@ -187,4 +177,4 @@ closeBtn.MouseButton1Click:Connect(function()
 	screenGui.Enabled = false
 end)
 
-print("✅ 自动拾取脚本已加载（稳健版）")
+print("Auto Pickup Loaded")
