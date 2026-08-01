@@ -1,207 +1,186 @@
---// Services
+-- LocalScript
+-- 放在 StarterPlayerScripts 或 StarterGui 下
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 
---// 设置
-local skills = {"E","R","T","Y","G"}
-local followDistance = 6
-local detectRange = 80
-local detectDelay = 0.4
+local enabled = false
+local DETECT_RANGE = 300
+local DETECT_INTERVAL = 0.5
 
---// 状态
-local autoFight = false
-local autoSkill = false
-local running = true
-local currentTarget = nil
-local lockedPosition = nil
+-- ==================== UI ====================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AutoPickupUI"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = player:WaitForChild("PlayerGui")
 
---// GUI
-local gui = Instance.new("ScreenGui")
-gui.Parent = game.CoreGui
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 220, 0, 140)
+mainFrame.Position = UDim2.new(0.5, -110, 0.2, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
 
-local frame = Instance.new("Frame")
-frame.Parent = gui
-frame.Size = UDim2.new(0,220,0,170)
-frame.Position = UDim2.new(0.5,-110,0.5,-85)
-frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
-frame.Active = true
-frame.Draggable = true
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 10)
+corner.Parent = mainFrame
 
 local title = Instance.new("TextLabel")
-title.Parent = frame
-title.Size = UDim2.new(1,0,0,30)
-title.Text = "Auto Boss Fight"
-title.TextColor3 = Color3.new(1,1,1)
-title.BackgroundTransparency = 1
+title.Size = UDim2.new(1, 0, 0, 32)
+title.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+title.BorderSizePixel = 0
+title.Text = "自动拾取"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.Parent = mainFrame
 
--- 关闭按钮
-local closeButton = Instance.new("TextButton")
-closeButton.Parent = frame
-closeButton.Size = UDim2.new(0,30,0,30)
-closeButton.Position = UDim2.new(1,-30,0,0)
-closeButton.Text = "X"
-closeButton.BackgroundColor3 = Color3.fromRGB(170,0,0)
-closeButton.TextColor3 = Color3.new(1,1,1)
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 10)
+titleCorner.Parent = title
 
--- Auto Fight
-local fightButton = Instance.new("TextButton")
-fightButton.Parent = frame
-fightButton.Size = UDim2.new(0.8,0,0,40)
-fightButton.Position = UDim2.new(0.1,0,0.3,0)
-fightButton.Text = "Auto Fight: OFF"
-fightButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
-fightButton.TextColor3 = Color3.new(1,1,1)
+-- 开关按钮
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Name = "ToggleBtn"
+toggleBtn.Size = UDim2.new(0.85, 0, 0, 36)
+toggleBtn.Position = UDim2.new(0.075, 0, 0.32, 0)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+toggleBtn.BorderSizePixel = 0
+toggleBtn.Text = "开启自动拾取"
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.Font = Enum.Font.Gotham
+toggleBtn.TextSize = 14
+toggleBtn.Parent = mainFrame
 
--- Auto Skill
-local skillButton = Instance.new("TextButton")
-skillButton.Parent = frame
-skillButton.Size = UDim2.new(0.8,0,0,40)
-skillButton.Position = UDim2.new(0.1,0,0.6,0)
-skillButton.Text = "Auto Skill: OFF"
-skillButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
-skillButton.TextColor3 = Color3.new(1,1,1)
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 8)
+toggleCorner.Parent = toggleBtn
 
---// 找敌人
-local function getClosestEnemy()
+-- 关闭UI按钮
+local closeBtn = Instance.new("TextButton")
+closeBtn.Name = "CloseBtn"
+closeBtn.Size = UDim2.new(0.85, 0, 0, 32)
+closeBtn.Position = UDim2.new(0.075, 0, 0.65, 0)
+closeBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+closeBtn.BorderSizePixel = 0
+closeBtn.Text = "关闭UI"
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.Font = Enum.Font.Gotham
+closeBtn.TextSize = 14
+closeBtn.Parent = mainFrame
 
-    local char = player.Character
-    if not char then return end
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 8)
+closeCorner.Parent = closeBtn
 
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
+-- ==================== 功能逻辑 ====================
 
-    local parts = workspace:GetPartBoundsInRadius(hrp.Position, detectRange)
-
-    local closest = nil
-    local shortest = detectRange
-
-    for _,part in pairs(parts) do
-
-        local model = part:FindFirstAncestorOfClass("Model")
-
-        if model and model ~= char then
-
-            local humanoid = model:FindFirstChildOfClass("Humanoid")
-            local enemyHRP = model:FindFirstChild("HumanoidRootPart")
-
-            if humanoid and enemyHRP and humanoid.Health > 0 then
-
-                local dist = (enemyHRP.Position - hrp.Position).Magnitude
-
-                if dist < shortest then
-                    shortest = dist
-                    closest = model
-                end
-
-            end
-
-        end
-
-    end
-
-    return closest
+local function updateCharacter()
+	character = player.Character
+	if character then
+		humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+	end
 end
 
--- 按钮
-fightButton.MouseButton1Click:Connect(function()
-
-    autoFight = not autoFight
-    fightButton.Text = autoFight and "Auto Fight: ON" or "Auto Fight: OFF"
-
-    if not autoFight then
-        lockedPosition = nil
-    end
-
+player.CharacterAdded:Connect(function(char)
+	character = char
+	humanoidRootPart = char:WaitForChild("HumanoidRootPart")
 end)
 
-skillButton.MouseButton1Click:Connect(function()
+local function getClosestItems()
+	local itemsFolder = workspace:FindFirstChild("item")
+	if not itemsFolder then return {} end
 
-    autoSkill = not autoSkill
-    skillButton.Text = autoSkill and "Auto Skill: ON" or "Auto Skill: OFF"
+	local results = {}
+	local hrpPos = humanoidRootPart and humanoidRootPart.Position
 
-end)
+	if not hrpPos then return {} end
 
--- 关闭脚本
-closeButton.MouseButton1Click:Connect(function()
+	for _, obj in ipairs(itemsFolder:GetDescendants()) do
+		if obj:IsA("MeshPart") then
+			local dist = (obj.Position - hrpPos).Magnitude
+			if dist <= DETECT_RANGE then
+				table.insert(results, {
+					part = obj,
+					distance = dist
+				})
+			end
+		end
+	end
 
-    running = false
-    gui:Destroy()
+	table.sort(results, function(a, b)
+		return a.distance < b.distance
+	end)
 
-end)
+	return results
+end
 
--- 检测Boss
+local function pressE()
+	-- 模拟按下并松开 E 键
+	VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+	task.wait(0.08)
+	VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+end
+
+local function tryPickup(part)
+	if not humanoidRootPart or not part or not part.Parent then return end
+
+	-- 瞬移到物品上方一点
+	humanoidRootPart.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+
+	-- 把长按改成按一下就能触发
+	local prompt = part:FindFirstChildOfClass("ProximityPrompt")
+		or part:FindFirstChildWhichIsA("ProximityPrompt", true)
+
+	if prompt then
+		prompt.HoldDuration = 0          -- 关键关键
+		prompt.MaxActivationDistance = 20 -- 保证能触发
+	end
+
+	task.wait(0.12) -- 等一下让Prompt刷新
+	pressE()
+end
+
+-- 主循环
 task.spawn(function()
-
-    while running do
-        task.wait(detectDelay)
-
-        if autoFight then
-            currentTarget = getClosestEnemy()
-        else
-            currentTarget = nil
-            lockedPosition = nil
-        end
-
-    end
-
+	while true do
+		if enabled and humanoidRootPart then
+			local items = getClosestItems()
+			for _, data in ipairs(items) do
+				if not enabled then break end
+				tryPickup(data.part)
+				task.wait(0.15) -- 每个物品之间稍微间隔一下，防止卡顿
+			end
+		end
+		task.wait(DETECT_INTERVAL)
+	end
 end)
 
--- 跟随Boss（锁定位置版本）
-RunService.RenderStepped:Connect(function()
-
-    if not running then return end
-    if not autoFight then return end
-    if not currentTarget then 
-        lockedPosition = nil
-        return 
-    end
-
-    local char = player.Character
-    if not char then return end
-
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-
-    local targetHRP = currentTarget:FindFirstChild("HumanoidRootPart")
-    if not targetHRP then 
-        lockedPosition = nil
-        return 
-    end
-
-    -- 第一次锁定时记录位置
-    if not lockedPosition then
-
-        local direction = (hrp.Position - targetHRP.Position).Unit
-        lockedPosition = targetHRP.Position + direction * followDistance
-
-    end
-
-    -- 强制固定位置 + 锁定朝向
-    hrp.CFrame = CFrame.lookAt(lockedPosition, targetHRP.Position)
-
+-- 按钮事件
+toggleBtn.MouseButton1Click:Connect(function()
+	enabled = not enabled
+	if enabled then
+		toggleBtn.Text = "关闭自动拾取"
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 140, 70)
+	else
+		toggleBtn.Text = "开启自动拾取"
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+	end
 end)
 
--- 自动技能
-task.spawn(function()
-
-    while running do
-        task.wait(0.5)
-
-        if autoSkill then
-
-            for _,key in pairs(skills) do
-
-                VirtualInputManager:SendKeyEvent(true,key,false,game)
-                task.wait(0.05)
-                VirtualInputManager:SendKeyEvent(false,key,false,game)
-
-            end
-
-        end
-
-    end
-
+closeBtn.MouseButton1Click:Connect(function()
+	screenGui.Enabled = false
 end)
+
+print("自动拾取脚本已加载")
