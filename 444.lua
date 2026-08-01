@@ -1,19 +1,35 @@
--- LocalScript
--- 放在 StarterPlayerScripts 或 StarterGui 下
+-- LocalScript（更稳健版）
+-- 放在 StarterPlayerScripts
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
-local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+local character, humanoidRootPart
 
 local enabled = false
 local DETECT_RANGE = 300
 local DETECT_INTERVAL = 0.5
+
+-- 安全获取角色
+local function updateCharacter()
+	character = player.Character
+	if character then
+		humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+	else
+		humanoidRootPart = nil
+	end
+end
+
+updateCharacter()
+player.CharacterAdded:Connect(function(char)
+	character = char
+	humanoidRootPart = char:WaitForChild("HumanoidRootPart", 5)
+end)
+
+player.CharacterRemoving:Connect(function()
+	humanoidRootPart = nil
+end)
 
 -- ==================== UI ====================
 local screenGui = Instance.new("ScreenGui")
@@ -23,7 +39,6 @@ screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Name = "MainFrame"
 mainFrame.Size = UDim2.new(0, 220, 0, 140)
 mainFrame.Position = UDim2.new(0.5, -110, 0.2, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
@@ -50,9 +65,7 @@ local titleCorner = Instance.new("UICorner")
 titleCorner.CornerRadius = UDim.new(0, 10)
 titleCorner.Parent = title
 
--- 开关按钮
 local toggleBtn = Instance.new("TextButton")
-toggleBtn.Name = "ToggleBtn"
 toggleBtn.Size = UDim2.new(0.85, 0, 0, 36)
 toggleBtn.Position = UDim2.new(0.075, 0, 0.32, 0)
 toggleBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
@@ -67,9 +80,7 @@ local toggleCorner = Instance.new("UICorner")
 toggleCorner.CornerRadius = UDim.new(0, 8)
 toggleCorner.Parent = toggleBtn
 
--- 关闭UI按钮
 local closeBtn = Instance.new("TextButton")
-closeBtn.Name = "CloseBtn"
 closeBtn.Size = UDim2.new(0.85, 0, 0, 32)
 closeBtn.Position = UDim2.new(0.075, 0, 0.65, 0)
 closeBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
@@ -84,37 +95,23 @@ local closeCorner = Instance.new("UICorner")
 closeCorner.CornerRadius = UDim.new(0, 8)
 closeCorner.Parent = closeBtn
 
--- ==================== 功能逻辑 ====================
-
-local function updateCharacter()
-	character = player.Character
-	if character then
-		humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-	end
-end
-
-player.CharacterAdded:Connect(function(char)
-	character = char
-	humanoidRootPart = char:WaitForChild("HumanoidRootPart")
-end)
+-- ==================== 核心逻辑 ====================
 
 local function getClosestItems()
 	local itemsFolder = workspace:FindFirstChild("item")
 	if not itemsFolder then return {} end
+	if not humanoidRootPart then return {} end
 
 	local results = {}
-	local hrpPos = humanoidRootPart and humanoidRootPart.Position
-
-	if not hrpPos then return {} end
+	local hrpPos = humanoidRootPart.Position
 
 	for _, obj in ipairs(itemsFolder:GetDescendants()) do
-		if obj:IsA("MeshPart") then
-			local dist = (obj.Position - hrpPos).Magnitude
-			if dist <= DETECT_RANGE then
-				table.insert(results, {
-					part = obj,
-					distance = dist
-				})
+		if obj:IsA("MeshPart") and obj.Parent then
+			local success, dist = pcall(function()
+				return (obj.Position - hrpPos).Magnitude
+			end)
+			if success and dist <= DETECT_RANGE then
+				table.insert(results, {part = obj, distance = dist})
 			end
 		end
 	end
@@ -127,47 +124,54 @@ local function getClosestItems()
 end
 
 local function pressE()
-	-- 模拟按下并松开 E 键
-	VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-	task.wait(0.08)
-	VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+	pcall(function()
+		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+		task.wait(0.08)
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+	end)
 end
 
 local function tryPickup(part)
 	if not humanoidRootPart or not part or not part.Parent then return end
 
-	-- 瞬移到物品上方一点
-	humanoidRootPart.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+	local success = pcall(function()
+		humanoidRootPart.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+	end)
+	if not success then return end
 
-	-- 把长按改成按一下就能触发
+	-- 修改长按为瞬间触发
 	local prompt = part:FindFirstChildOfClass("ProximityPrompt")
-		or part:FindFirstChildWhichIsA("ProximityPrompt", true)
-
-	if prompt then
-		prompt.HoldDuration = 0          -- 关键关键
-		prompt.MaxActivationDistance = 20 -- 保证能触发
+	if not prompt then
+		prompt = part:FindFirstChildWhichIsA("ProximityPrompt", true)
 	end
 
-	task.wait(0.12) -- 等一下让Prompt刷新
+	if prompt then
+		pcall(function()
+			prompt.HoldDuration = 0
+			prompt.MaxActivationDistance = 25
+		end)
+	end
+
+	task.wait(0.15)
 	pressE()
 end
 
 -- 主循环
 task.spawn(function()
 	while true do
-		if enabled and humanoidRootPart then
+		if enabled and humanoidRootPart and humanoidRootPart.Parent then
 			local items = getClosestItems()
 			for _, data in ipairs(items) do
 				if not enabled then break end
 				tryPickup(data.part)
-				task.wait(0.15) -- 每个物品之间稍微间隔一下，防止卡顿
+				task.wait(0.18)
 			end
 		end
 		task.wait(DETECT_INTERVAL)
 	end
 end)
 
--- 按钮事件
+-- 按钮
 toggleBtn.MouseButton1Click:Connect(function()
 	enabled = not enabled
 	if enabled then
@@ -183,4 +187,4 @@ closeBtn.MouseButton1Click:Connect(function()
 	screenGui.Enabled = false
 end)
 
-print("自动拾取脚本已加载")
+print("✅ 自动拾取脚本已加载（稳健版）")
